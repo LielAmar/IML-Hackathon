@@ -101,7 +101,7 @@ def calculate_worth(time_duration, tuple_info):
     return worth
     # Use a breakpoint in the code line below to debug your script.
 
-def calculate_total_worth(time_duration , info_tuple_list):
+def calculate_total_worth(price ,time_duration , info_tuple_list):
     sum = 0
     two_to_the = 1
     list = []
@@ -115,7 +115,7 @@ def calculate_total_worth(time_duration , info_tuple_list):
     #sum += 2 * two_to_the * calculate_worth(time_duration, info_tuple_list[-1])
     return sum/2
 
-def receive_policy(time_duration, nights, policy):
+def receive_policy(price, time_duration, nights, policy):
     if(time_duration == 0):
         return 1
         # TODO: change me
@@ -132,15 +132,15 @@ def receive_policy(time_duration, nights, policy):
             else:
                 pass
                 # TODO: handel no-show;
-    return calculate_total_worth(time_duration, info_list)
+    return calculate_total_worth(price, time_duration, info_list)
 
 def create_cancellation_policy_feature(X):
     for index, row in X.iterrows():
         time_duration = row["time_ahead"]
         nights = row["staying_duration"]
         policy = row["cancellation_policy_code"]
-
-        X.at[index, "cancellation_policy_code_2"] = receive_policy(time_duration, nights, policy)
+        price = row["original_selling_amount"]
+        X.at[index, "cancellation_policy_code_2"] = receive_policy(price, time_duration, nights, policy)
 
     return X
 
