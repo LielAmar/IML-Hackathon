@@ -8,6 +8,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import Ridge
+from sklearn.linear_model import Lasso
 
 from sklearn import svm
 from sklearn.datasets import make_classification
@@ -195,7 +196,6 @@ currencies = {
 
 
 def clean_data(X: pd.DataFrame, y: pd.Series):
-    X = X[X["no_of_adults"] < 20]
     X = X[X["no_of_people"] < 20]
     X = X[X["time_ahead"] >= -1]
     X[X["time_ahead"] <= 0] = 0
@@ -242,7 +242,7 @@ def remove_redundant_features(X):
                 'origin_country_code', 'original_payment_type', 'is_user_logged_in', 'is_first_booking',
                 'request_nonesmoke', 'request_latecheckin', 'request_earlycheckin', 'charge_option',
                 'cancellation_policy_code', 'original_payment_currency', 'original_payment_method',
-                'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime'], axis=1)
+                'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime',"hotel_brand_code","no_of_adults", "no_of_children"], axis=1)
 
     return X
 
@@ -251,7 +251,7 @@ def create_dummy_features(X):
     X['checkin_month'] = X['checkin_date'].dt.month
 
     X = pd.get_dummies(X, prefix='checkin_month', columns=['checkin_month'])
-    X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
+    # X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
     X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
     X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
 
@@ -310,7 +310,6 @@ if __name__ == "__main__":
     X_train, y_train = preprocess_train(X_train, y_train)
 
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
-
     def rmse(y_true, y_pred):
         y_pred[y_pred < 0] = -1
         mse = mean_squared_error(y_true, y_pred)
@@ -318,13 +317,15 @@ if __name__ == "__main__":
         return -rmse
 
     rmse_scorer = make_scorer(rmse, greater_is_better=False)
-
-    for alpha in np.linspace(0.1,50, 50):
+    corr_data = X_train.copy()
+    corr_data["answers"] = y_train
+    corr = corr_data[["answers","time_ahead",'staying_duration', 'no_of_people', 'hotel_star_rating']].corr()
+    for alpha in np.linspace(1,50, 50):
         # alpha = 3.5 for 172.5
         print(f"checking alpha {alpha}")
-        model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
-        # model = Ridge(alpha=alpha)
-        scores = cross_val_score(model, X_train[:10000], y_train[:10000], cv=5, scoring=rmse_scorer)
+        # model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
+        model = Ridge(alpha=alpha)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring=rmse_scorer)
 
         print(f"score for linear regression (depth {alpha}, cv {5}) is:", np.round(scores, 2), " Mean: ",
               np.mean(scores))
