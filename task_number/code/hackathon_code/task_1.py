@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 import re
@@ -283,40 +285,13 @@ def create_linear_features(X):
 
     return X
 
-<<<<<<< HEAD
-def calculate_worth(percent_left, time_duration, cancellation_policy):
-    cancellation_days = cancellation_policy[0]
-    percent = cancellation_policy[1]
-    if time_duration <= cancellation_days:
-        worth = percent
-    else:
-        worth = (cancellation_days/time_duration) * percent * (percent_left / 100.0)
-    return worth
-    # Use a breakpoint in the code line below to debug your script.
-
-def calculate_total_worth(price ,time_duration , info_tuple_list):
-    percent_paid = 0
-    scalar = 1
-    policy_list = []
-    percent_left = 100
-    for i in range(0, len(info_tuple_list)):
-        worth = calculate_worth(percent_left, time_duration, info_tuple_list[i])
-        if worth == info_tuple_list[i][1]:
-            percent_left -= worth
-        policy_list.append(worth)
-    policy_list.sort(reverse=True)
-    for i in range(0, len(policy_list)):
-        percent_paid += scalar * policy_list[i]
-        scalar *= 0.5
-    return percent_paid
-=======
 
 def calculate_worth(time_duration, cancellation_policy):
     if time_duration == 0:
         return 0
     cancellation_days = cancellation_policy[0]
     percent = cancellation_policy[1]
-    worth = (cancellation_days / time_duration) * percent
+    worth = math.pow((cancellation_days / time_duration), 3) * percent
     return worth
 
 
@@ -324,24 +299,23 @@ def calculate_total_worth(time_duration, info_tuple_list):
     total_worth = 0
     scalar = 1
     policy_list = []
-    j = 0
+    j = len(info_tuple_list)
     percent_cost = 0
     for i in range(0, len(info_tuple_list)):
         if time_duration <= info_tuple_list[i][0]:
             percent_cost = info_tuple_list[i][1]
         else:
             j = i
-    if j != len(info_tuple_list) - 1:
-        for i in range(j, len(info_tuple_list)):
-            worth = calculate_worth(time_duration, info_tuple_list[i])
-            policy_list.append(worth)
-        policy_list.sort(reverse=True)
+    for i in range(j, len(info_tuple_list)):
+        worth = calculate_worth(time_duration, info_tuple_list[i])
+        time_duration = info_tuple_list[i][0]
+        policy_list.append(worth)
+    policy_list.sort(reverse=True)
     for i in range(0, len(policy_list)):
         total_worth += scalar * policy_list[i]
         scalar *= 0.5
     return total_worth * ((100 - percent_cost) / 100.0) + percent_cost
 
->>>>>>> f557ed96fd7fc204757d4c3c27eeb7a9602b68e7
 
 def receive_policy(price, time_duration, nights, policy):
     policies = policy.split("_")
@@ -351,32 +325,19 @@ def receive_policy(price, time_duration, nights, policy):
         if match:
             if match.group(1):
                 if pol[-1] == "N":
-                    info_list.append((int(match.group(2)), (100 * int(match.group(3))) / nights))
+                    info_list.append((int(match.group(2)), (100 * int(match.group(3))) / float(nights)))
                 else:
                     info_list.append((int(match.group(2)), int(match.group(3))))
-    return price * calculate_total_worth(time_duration, info_list)
+    return calculate_total_worth(time_duration, info_list)
 
 def create_cancellation_policy_feature(X):
-<<<<<<< HEAD
-=======
     X['no_show'] = X.apply(lambda x: 1 if re.search(r"[^D](\d+)([PN])", x["cancellation_policy_code"]) else 0, axis=1)
 
     X["cancellation_policy_code"] = X.apply(lambda x:
                                             receive_policy(x["original_selling_amount"], x["time_ahead"],
                                                            x["staying_duration"],
                                                            x["cancellation_policy_code"]), axis=1)
->>>>>>> f557ed96fd7fc204757d4c3c27eeb7a9602b68e7
 
-    X["cancellation_policy_code"] = X.apply(lambda x:
-                                            receive_policy(X["original_selling_amount"], X["time_ahead"],
-                                                           X["staying_duration"], X["cancellation_policy_code"]))
-    #
-    # for index, row in X.iterrows():
-    #     time_duration = row["time_ahead"]
-    #     nights = row["staying_duration"]
-    #     policy = row["cancellation_policy_code"]
-    #     price = row["original_selling_amount"]
-    #     X.at[index, "cancellation_policy_code_2"] = receive_policy(price, time_duration, nights, policy)
     return X
 
 
@@ -486,18 +447,22 @@ if __name__ == "__main__":
 
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
 
-    tsne = TSNE(n_components=2, perplexity=30, random_state=0)
-    embedded_data = tsne.fit_transform(X_train, y_train)
+    X = X_train
+    X["answer"] = ~y_train.isna()
+    ans = X.corr()
+    #
+    # tsne = TSNE(n_components=2, perplexity=30, random_state=0)
+    # embedded_data = tsne.fit_transform(X_train, y_train)
+    #
+    # plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=y_train, s=30)
+    # plt.xlabel('Principal Component 1')
+    # plt.ylabel('Principal Component 2')
+    # plt.title('PCA Result')
+    # plt.savefig('pca_result.png')
+    # plt.show()
 
-    plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=y_train, s=30)
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    plt.title('PCA Result')
-    plt.savefig('pca_result.png')
-    plt.show()
 
-
-    # run_estimator_testing(X_train, y_train)
+    run_estimator_testing(X_train, y_train)
 
     # Fit the model to your data
     # adaboost_model.fit(X_train, y_train)
