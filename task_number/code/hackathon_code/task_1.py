@@ -192,12 +192,124 @@ currencies = {
 }
 
 
+def split_data(df: pd.DataFrame):
+    # Divide into X and y
+    X, y = df.drop(["cancellation_datetime"], axis=1), df["cancellation_datetime"]
+
+    # Divide into train, dev and test
+    X_train_dev, X_test, y_train_dev, y_test = train_test_split(X, y, test_size=0.25, random_state=0)
+
+    X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.1, random_state=0)
+
+    return X_train, X_dev, X_test, y_train, y_dev, y_test
+
+
 def remove_problematic_samples(X, y):
     X = X[~X["cancellation_policy_code"].isna()]
     y = y.loc[X.index]
 
     return X, y
 
+
+def create_dummy_features(X):
+    X['checkin_month'] = X['checkin_date'].dt.month
+
+    X = pd.get_dummies(X, prefix='checkin_month', columns=['checkin_month'])
+    X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
+    # X = pd.get_dummies(X, prefix='original_payment_method', columns=['original_payment_method'])
+    # X = pd.get_dummies(X, prefix='original_payment_type', columns=['original_payment_type'])
+    # X = pd.get_dummies(X, prefix="charge_option", columns=["charge_option"])
+
+    X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
+    X = pd.get_dummies(X, prefix='hotel_chain_code', columns=['hotel_chain_code'])
+    X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
+
+    return X
+
+
+def create_boolean_features(X):
+    # X['children'] = (X['no_of_children'] > 0)
+    # X['same_country_order'] = (X['hotel_country_code'] == X['origin_country_code'])
+    # guest is not the customer
+    # logged in
+    # first booking
+    return X
+
+
+def create_linear_features(X):
+    X['existence'] = np.round((X['hotel_live_date'] - X['booking_datetime']) / np.timedelta64(1, 'D'))
+    X['time_ahead'] = np.round((X['checkin_date'] - X['booking_datetime']) / np.timedelta64(1, 'D'))
+    X['staying_duration'] = np.round((X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D'))
+    X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
+
+    X['original_selling_amount'] = X.apply(lambda x:
+                                           (1 / currencies[x["original_payment_currency"]]) * x[
+                                               "original_selling_amount"], axis=1)
+    # star rating
+    # no of adults
+
+    return X
+
+
+def create_cancellation_policy_feature(X):
+    X['no_show'] = X.apply(lambda x: 1 if re.search(r"[^D](\d+)([PN])", x["cancellation_policy_code"]) else 0, axis=1)
+
+    def calculate_penalty(penalty, x):
+        if penalty.endswith("P"):
+            return int(penalty.split("P")[0]) / 100
+
+        price_per_night = x["original_selling_amount"] / x["staying_duration"]
+
+        return (price_per_night * int(penalty.split("N")[0])) / x["original_selling_amount"]
+
+    def policy_penalty(x, num):
+        all_policies = x["cancellation_policy_code"]
+        policies = all_policies.split("_")
+
+        max_penalty = 0
+        recent = 365
+
+        for policy in policies:
+            if "D" not in policy:
+                continue
+
+            data = policy.split("D")
+            days, penalty = int(data[0]), data[1]
+
+            if days < num:
+                continue
+
+            if days > recent:
+                continue
+
+            recent = days
+
+            max_penalty = max(calculate_penalty(penalty, x), max_penalty)
+
+        return max_penalty
+
+    X["cancellation_policy_30"] = X.apply(lambda x: policy_penalty(x, 30), axis=1)
+    X["cancellation_policy_14"] = X.apply(lambda x: policy_penalty(x, 14), axis=1)
+    X["cancellation_policy_7"] = X.apply(lambda x: policy_penalty(x, 7), axis=1)
+    X["cancellation_policy_1"] = X.apply(lambda x: policy_penalty(x, 1), axis=1)
+
+    return X
+
+
+def remove_redundant_features(X):
+    X = X.drop(['h_booking_id', 'hotel_id', 'hotel_area_code', 'hotel_live_date', 'h_customer_id',
+                'customer_nationality', 'no_of_extra_bed', 'no_of_room', 'language', 'original_payment_currency',
+                'request_nonesmoke', 'request_latecheckin', 'request_highfloor', 'request_largebed',
+                'request_twinbeds', 'request_airport', 'request_earlycheckin'], axis=1)
+
+    return X.drop(['checkin_date', 'checkout_date', 'booking_datetime', 'no_of_children',
+                   'hotel_country_code', 'origin_country_code', 'cancellation_policy_code',
+                   'original_payment_method', 'original_payment_type', 'charge_option',
+                   'hotel_brand_code'], axis=1)
+
+ # X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
+    # X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code']) chain
+    # X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
 
 def clean_data(X: pd.DataFrame, y: pd.Series):
     X = X[X["no_of_adults"] < 20]
@@ -220,123 +332,6 @@ def clean_data(X: pd.DataFrame, y: pd.Series):
         X.loc[(X[feature].isna()) | (X[feature] < 0), feature] = means[feature]
 
     return X, y
-
-
-def split_data(df: pd.DataFrame):
-    # Divide into X and y
-    X, y = df.drop(["cancellation_datetime"], axis=1), df["cancellation_datetime"]
-
-    # Divide into train, dev and test
-    X_train_dev, X_test, y_train_dev, y_test = train_test_split(X, y, test_size=0.25, random_state=0)
-
-    X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.1, random_state=0)
-
-    return X_train, X_dev, X_test, y_train, y_dev, y_test
-
-
-def remove_redundant_features(X):
-    X = X.drop(['h_booking_id', 'hotel_id', 'hotel_area_code', 'hotel_chain_code', 'hotel_live_date', 'h_customer_id',
-                'customer_nationality', 'no_of_extra_bed', 'no_of_room', 'language', 'original_payment_currency',
-                'request_nonesmoke', 'request_latecheckin', 'request_highfloor', 'request_largebed',
-                'request_twinbeds', 'request_airport', 'request_earlycheckin'], axis=1)
-
-    return X.drop(['checkin_date', 'checkout_date', 'booking_datetime', 'no_of_children',
-                   'hotel_country_code', 'origin_country_code', 'hotel_city_code',
-                   'hotel_brand_code', 'guest_nationality_country_name'], axis=1)
-
-
-def create_dummy_features(X):
-    X['checkin_month'] = X['checkin_date'].dt.month
-
-    X = pd.get_dummies(X, prefix='checkin_month', columns=['checkin_month'])
-    # X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
-    # X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
-    X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
-    # X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
-    X = pd.get_dummies(X, prefix='original_payment_method', columns=['original_payment_method'])
-    X = pd.get_dummies(X, prefix='original_payment_type', columns=['original_payment_type'])
-    X = pd.get_dummies(X, prefix="charge_option", columns=["charge_option"])
-
-    return X
-
-
-def create_boolean_features(X):
-    X['children'] = (X['no_of_children'] > 0)
-    X['same_country_order'] = (X['hotel_country_code'] == X['origin_country_code'])
-    # guest is not the customer
-    # logged in
-    # first booking
-    return X
-
-
-def create_linear_features(X):
-    X['time_ahead'] = np.round((X['checkin_date'] - X['booking_datetime']) / np.timedelta64(1, 'D'))
-    X['staying_duration'] = np.round((X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D'))
-    X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
-
-    X['original_selling_amount'] = X.apply(lambda x:
-                                           (1 / currencies[x["original_payment_currency"]]) * x[
-                                               "original_selling_amount"], axis=1)
-    # star rating
-    # no of adults
-    # selling amount
-
-    return X
-
-
-def calculate_worth(time_duration, cancellation_policy):
-    if time_duration == 0:
-        return 0
-    cancellation_days = cancellation_policy[0]
-    percent = cancellation_policy[1]
-    worth = (cancellation_days / time_duration) * percent
-    return worth
-
-
-def calculate_total_worth(time_duration, info_tuple_list):
-    total_worth = 0
-    scalar = 1
-    policy_list = []
-    j = 0
-    percent_cost = 0
-    for i in range(0, len(info_tuple_list)):
-        if time_duration <= info_tuple_list[i][0]:
-            percent_cost = info_tuple_list[i][1]
-        else:
-            j = i
-    if j != len(info_tuple_list) - 1:
-        for i in range(j, len(info_tuple_list)):
-            worth = calculate_worth(time_duration, info_tuple_list[i])
-            policy_list.append(worth)
-        policy_list.sort(reverse=True)
-    for i in range(0, len(policy_list)):
-        total_worth += scalar * policy_list[i]
-        scalar *= 0.5
-    return total_worth * ((100 - percent_cost) / 100.0) + percent_cost
-
-
-def receive_policy(price, time_duration, nights, policy):
-    policies = policy.split("_")
-    info_list = []
-    for pol in policies:
-        match = re.search(r"((\d+)D)?(\d+)([PN])", pol)
-        if match:
-            if match.group(1):
-                if pol[-1] == "N":
-                    info_list.append((int(match.group(2)), (100 * int(match.group(3))) / nights))
-                else:
-                    info_list.append((int(match.group(2)), int(match.group(3))))
-    return price * calculate_total_worth(time_duration, info_list)
-
-def create_cancellation_policy_feature(X):
-    X['no_show'] = X.apply(lambda x: 1 if re.search(r"[^D](\d+)([PN])", x["cancellation_policy_code"]) else 0, axis=1)
-
-    X["cancellation_policy_code"] = X.apply(lambda x:
-                                            receive_policy(x["original_selling_amount"], x["time_ahead"],
-                                                           x["staying_duration"],
-                                                           x["cancellation_policy_code"]), axis=1)
-
-    return X
 
 
 def preprocess_train(X, y):
@@ -365,6 +360,7 @@ def preprocess_test(X, features):
 
     return X
 
+
 def run_estimator_testing(X_dev, y_dev):
     # print("Running tests...")
 
@@ -377,33 +373,34 @@ def run_estimator_testing(X_dev, y_dev):
     best_score_depth = 0
     best_score_cv = 0
 
-    for depth in range(1, 11):
-        for cv in [2, 5, 10, 20]:
-            model = DecisionTreeClassifier(max_depth=depth)
-            scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
-            print(f"score for decision tree (depth {depth}, cv {cv}) is:", np.round(scores, 2), " Mean: ", np.mean(scores))
+    # for depth in range(1, 11):
+    #     for cv in [2, 5, 10, 20]:
+    #         model = DecisionTreeClassifier(max_depth=depth)
+    #         scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
+    #         print(f"score for decision tree (depth {depth}, cv {cv}) is:", np.round(scores, 2), " Mean: ",
+    #               np.mean(scores))
+    #
+    #         if (np.mean(scores) > best_score):
+    #             best_score = np.mean(scores)
+    #             best_score_depth = depth
+    #             best_score_cv = cv
+    #
+    # print(f"best estimator: {best_score} for cv {best_score_cv} and depth {best_score_depth}")
+    # print("=======")
+    # best_score = 0
 
-            if(np.mean(scores) > best_score):
-                best_score = np.mean(scores)
-                best_score_depth = depth
-                best_score_cv = cv
-
-    print(f"best estimator: {best_score} for cv {best_score_cv} and depth {best_score_depth}")
-    print("=======")
-    best_score = 0
-
-    for neighbors in [2, 5, 10, 20, 50, 100, 200, 300, 500]:
-        for cv in [2, 5, 10, 20]:
-            model = KNeighborsClassifier(n_neighbors=neighbors)
-            scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
-            print(f"score for knn (neighbors: {neighbors}, cv {cv}) is:", scores, " Mean: ", np.mean(scores))
-
-            if (np.mean(scores) > best_score):
-                best_score = np.mean(scores)
-                best_score_depth = neighbors
-                best_score_cv = cv
-
-    print(f"best estimator: {best_score} for cv {best_score_cv} and neighbors {best_score_depth}")
+    # for neighbors in [2, 5, 10, 20, 50, 100, 200, 300, 500]:
+    #     for cv in [2, 5, 10, 20]:
+    #         model = KNeighborsClassifier(n_neighbors=neighbors)
+    #         scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
+    #         print(f"score for knn (neighbors: {neighbors}, cv {cv}) is:", scores, " Mean: ", np.mean(scores))
+    #
+    #         if (np.mean(scores) > best_score):
+    #             best_score = np.mean(scores)
+    #             best_score_depth = neighbors
+    #             best_score_cv = cv
+    #
+    # print(f"best estimator: {best_score} for cv {best_score_cv} and neighbors {best_score_depth}")
     print("=======")
     best_score = 0
 
@@ -421,7 +418,7 @@ def run_estimator_testing(X_dev, y_dev):
         if (np.mean(scores) > best_score):
             best_score = np.mean(scores)
             best_score_depth = n_estimator
-            best_score_cv = cv
+            # best_score_cv = cv
 
     print(f"best estimator: {best_score} for cv {best_score_cv} and estimators {best_score_depth}")
 
@@ -433,11 +430,12 @@ def run_estimator_testing(X_dev, y_dev):
 
     print("score for soft svm is:", scores, " Mean: ", np.mean(scores))
 
+
 if __name__ == "__main__":
     np.random.seed(0)
 
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
-                     parse_dates=['booking_datetime', 'checkin_date', 'checkout_date'])
+                     parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
     X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
 
@@ -445,18 +443,21 @@ if __name__ == "__main__":
 
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
 
-    tsne = TSNE(n_components=2, perplexity=30, random_state=0)
-    embedded_data = tsne.fit_transform(X_train, y_train)
+    # df = X_train
+    # df["answer"] = ~y_train.isna()
+    # corr = df.corr()
+    #
+    # tsne = TSNE(n_components=2, perplexity=30, random_state=0)
+    # embedded_data = tsne.fit_transform(X_train, ~y_train.isna())
+    #
+    # plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=~y_train.isna(), s=30)
+    # plt.xlabel('Principal Component 1')
+    # plt.ylabel('Principal Component 2')
+    # plt.title('PCA Result')
+    # plt.savefig('pca_result.png')
+    # plt.show()
 
-    plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=y_train, s=30)
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    plt.title('PCA Result')
-    plt.savefig('pca_result.png')
-    plt.show()
-
-
-    # run_estimator_testing(X_train, y_train)
+    run_estimator_testing(X_train, y_train)
 
     # Fit the model to your data
     # adaboost_model.fit(X_train, y_train)
