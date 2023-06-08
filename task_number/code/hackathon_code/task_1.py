@@ -4,6 +4,7 @@ import re
 
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
 from sklearn import svm
@@ -210,7 +211,7 @@ def clean_data(X: pd.DataFrame, y: pd.Series):
                                            & (X["hotel_star_rating"] >= 0)
                                            & (X["hotel_star_rating"] <= 5)
                                            & (X["hotel_star_rating"] % 0.5 == 0)]["hotel_star_rating"])
-    X.loc[(X["hotel_star_rating"] < 1) |
+    X.loc[(X["hotel_star_rating"] < 0) |
           (X["hotel_star_rating"] > 5) |
           (X["hotel_star_rating"] % 0.5 != 0), "hotel_star_rating"] = means["hotel_star_rating"]
 
@@ -241,7 +242,7 @@ def remove_redundant_features(X):
 
     return X.drop(['checkin_date', 'checkout_date', 'booking_datetime', 'no_of_children',
                    'hotel_country_code', 'origin_country_code', 'hotel_city_code',
-                   'hotel_brand_code'], axis=1)
+                   'hotel_brand_code', 'guest_nationality_country_name'], axis=1)
 
 
 def create_dummy_features(X):
@@ -251,7 +252,7 @@ def create_dummy_features(X):
     # X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
     # X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
     X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
-    X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
+    # X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
     X = pd.get_dummies(X, prefix='original_payment_method', columns=['original_payment_method'])
     X = pd.get_dummies(X, prefix='original_payment_type', columns=['original_payment_type'])
     X = pd.get_dummies(X, prefix="charge_option", columns=["charge_option"])
@@ -372,13 +373,24 @@ def run_estimator_testing(X_dev, y_dev):
     # scores = cross_val_score(model, X_dev[:1000], (~y_dev.isna())[:1000], cv=5, scoring="f1")
     # print("score for logistic regression is:", scores, " Mean: ", np.mean(scores))
 
+    best_score = 0
+    best_score_depth = 0
+    best_score_cv = 0
+
     for depth in range(1, 11):
         for cv in [2, 5, 10, 20]:
             model = DecisionTreeClassifier(max_depth=depth)
             scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
             print(f"score for decision tree (depth {depth}, cv {cv}) is:", np.round(scores, 2), " Mean: ", np.mean(scores))
 
+            if(np.mean(scores) > best_score):
+                best_score = np.mean(scores)
+                best_score_depth = depth
+                best_score_cv = cv
+
+    print(f"best estimator: {best_score} for cv {best_score_cv} and depth {best_score_depth}")
     print("=======")
+    best_score = 0
 
     for neighbors in [2, 5, 10, 20, 50, 100, 200, 300, 500]:
         for cv in [2, 5, 10, 20]:
@@ -386,7 +398,14 @@ def run_estimator_testing(X_dev, y_dev):
             scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
             print(f"score for knn (neighbors: {neighbors}, cv {cv}) is:", scores, " Mean: ", np.mean(scores))
 
+            if (np.mean(scores) > best_score):
+                best_score = np.mean(scores)
+                best_score_depth = neighbors
+                best_score_cv = cv
+
+    print(f"best estimator: {best_score} for cv {best_score_cv} and neighbors {best_score_depth}")
     print("=======")
+    best_score = 0
 
     base_model = DecisionTreeClassifier(max_depth=2)
 
@@ -398,6 +417,13 @@ def run_estimator_testing(X_dev, y_dev):
         scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=5, scoring="f1")
 
         print(f"score for adaboost (depth {n_estimator}, cv {5}) is:", np.round(scores, 2), " Mean: ", np.mean(scores))
+
+        if (np.mean(scores) > best_score):
+            best_score = np.mean(scores)
+            best_score_depth = n_estimator
+            best_score_cv = cv
+
+    print(f"best estimator: {best_score} for cv {best_score_cv} and estimators {best_score_depth}")
 
     print("=======")
 
@@ -419,7 +445,18 @@ if __name__ == "__main__":
 
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
 
-    run_estimator_testing(X_dev, y_dev)
+    tsne = TSNE(n_components=2, perplexity=30, random_state=0)
+    embedded_data = tsne.fit_transform(X_train, y_train)
+
+    plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=y_train, s=30)
+    plt.xlabel('Principal Component 1')
+    plt.ylabel('Principal Component 2')
+    plt.title('PCA Result')
+    plt.savefig('pca_result.png')
+    plt.show()
+
+
+    # run_estimator_testing(X_train, y_train)
 
     # Fit the model to your data
     # adaboost_model.fit(X_train, y_train)
