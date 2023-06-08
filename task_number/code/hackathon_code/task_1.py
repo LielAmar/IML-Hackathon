@@ -6,6 +6,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
+from sklearn import svm
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
 import matplotlib.pyplot as plt
 
 def remove_problematic_samples(X, y):
@@ -22,7 +27,6 @@ def clean_data(X: pd.DataFrame, y: pd.Series):
     X[X["time_ahead"] <= 0] = 0
     y = y.loc[X.index]
 
-    # TODO: save means for test preprocess
     means = dict()
     means["hotel_star_rating"] = np.mean(X[(~X["hotel_star_rating"].isna())
                                            & (X["hotel_star_rating"] >= 0)
@@ -140,13 +144,12 @@ def create_cancellation_policy_feature(X):
         nights = row["staying_duration"]
         policy = row["cancellation_policy_code"]
         price = row["original_selling_amount"]
-        X.at[index, "cancellation_policy_code_2"] = receive_policy(price, time_duration, nights, policy)
+        X.at[index, "cancellation_policy_code"] = receive_policy(price, time_duration, nights, policy)
 
     return X
 
 def preprocess_train(X, y):
     X, y = remove_problematic_samples(X, y)
-    y = ~y.isna()
 
     X = create_dummy_features(X)
     X = create_boolean_features(X)
@@ -157,18 +160,19 @@ def preprocess_train(X, y):
 
     X, y = clean_data(X, y)
 
-    scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(X.drop(['cancellation_policy_code'], axis=1))
-    pca = PCA(n_components=2)
-    pca.fit(scaled_data)
-    transformed_data = pca.transform(scaled_data)
+    return X, y
 
-    plt.scatter(transformed_data[:, 0], transformed_data[:, 1], c=y, s=30)
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    plt.title('PCA Result')
-    plt.savefig('pca_result.png')
-    plt.show()
+def preprocess_test(X, features):
+    X = create_boolean_features(X)
+    X = create_linear_features(X)
+    X = create_dummy_features(X)
+    X = create_cancellation_policy_feature(X)
+
+    # Reindexing X - removing columns that are not in the features list
+    X = X.reindex(columns=features, fill_value=0)
+
+    return X
+
 
 if __name__ == "__main__":
     np.random.seed(0)
@@ -178,6 +182,30 @@ if __name__ == "__main__":
 
     X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
 
-    preprocess_train(X_train, y_train)
+    X_train, y_train = preprocess_train(X_train, y_train)
+
+    X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+
+    # Soft-SVM
+    svm_classifier = svm.SVC(C=1.0)
+    svm_classifier.fit(X_train, ~y_train.isna())
+    y_pred = svm_classifier.predict(X_dev)
+    accuracy = accuracy_score(~y_dev.isna(), y_pred)
+
+    print("accuracy", accuracy)
+
+    # PCA
+    # scaler = StandardScaler()
+    # scaled_data = scaler.fit_transform(X.drop(['cancellation_policy_code'], axis=1))
+    # pca = PCA(n_components=2)
+    # pca.fit(scaled_data)
+    # transformed_data = pca.transform(scaled_data)
+    #
+    # plt.scatter(transformed_data[:, 0], transformed_data[:, 1], c=y, s=30)
+    # plt.xlabel('Principal Component 1')
+    # plt.ylabel('Principal Component 2')
+    # plt.title('PCA Result')
+    # plt.savefig('pca_result.png')
+    # plt.show()
 
 # TODO: restore columns for test cases
