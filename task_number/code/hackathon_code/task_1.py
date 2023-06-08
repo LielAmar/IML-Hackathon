@@ -399,18 +399,23 @@ def remove_redundant_features(X):
                    'original_payment_type', 'original_payment_method'], axis=1)
 
 
-def clean_data(X: pd.DataFrame, y: pd.Series):
-    X = X[X["no_of_adults"] < 20]
-    X = X[X["no_of_people"] < 20]
-    X = X[X["time_ahead"] >= -1]
+def clean_data(X: pd.DataFrame, y: pd.Series=None, is_test=False):
+    if not is_test:
+        X = X[X["no_of_adults"] < 20]
+        X = X[X["no_of_people"] < 20]
+        X = X[X["time_ahead"] >= -1]
+        y = y.loc[X.index]
+
     X[X["time_ahead"] <= 0] = 0
-    y = y.loc[X.index]
 
     X.loc[(X["hotel_star_rating"] < 0) |
           (X["hotel_star_rating"] > 5), "hotel_star_rating"] = means["hotel_star_rating"]
 
     for feature in ["original_selling_amount", "time_ahead", "staying_duration", "no_of_people"]:
         X.loc[(X[feature].isna()) | (X[feature] < 0), feature] = means[feature]
+
+    if is_test:
+        return X
 
     return X, y
 
@@ -436,6 +441,7 @@ def preprocess_test(X, features):
     X = create_dummy_features(X)
     X = create_cancellation_policy_feature(X)
 
+    X = clean_data(X, is_test=True)
     # Reindexing X - removing columns that are not in the features list
     X = X.reindex(columns=features, fill_value=0)
 
@@ -524,7 +530,7 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     print(f"The best found model is {best_model_name} with a score of {best_model_score}")
 
     X_axis = np.arange(len(errors))
-    width = 0.1
+    width = 0.075
 
     plt.figure(figsize=(20, 9))
 
