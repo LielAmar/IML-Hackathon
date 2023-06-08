@@ -5,13 +5,24 @@ import joblib
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
+from sklearn.metrics import accuracy_score, mean_squared_error
 
-from sklearn.linear_model import LogisticRegression
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+
+import matplotlib.pyplot as plt
+
+
+means = {'hotel_star_rating': 2.7379305082159027,
+         'original_selling_amount': 204.4114964134914,
+         'time_ahead': 30.059532563322083,
+         'staying_duration': 1.783537671058656,
+         'no_of_people': 2.1357277305794375}
 
 columns = ['hotel_star_rating', 'guest_is_not_the_customer', 'no_of_adults', 'original_selling_amount',
            'is_user_logged_in', 'is_first_booking', 'checkin_month_6', 'checkin_month_7', 'checkin_month_8',
@@ -299,12 +310,6 @@ def create_dummy_features(X):
 
     X = pd.get_dummies(X, prefix='checkin_month', columns=['checkin_month'])
     X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
-    # X = pd.get_dummies(X, prefix='original_payment_method', columns=['original_payment_method'])
-    # X = pd.get_dummies(X, prefix='original_payment_type', columns=['original_payment_type'])
-    # X = pd.get_dummies(X, prefix="charge_option", columns=["charge_option"])
-
-    # X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
-    # X = pd.get_dummies(X, prefix='hotel_chain_code', columns=['hotel_chain_code'])
     X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
 
     return X
@@ -401,15 +406,10 @@ def clean_data(X: pd.DataFrame, y: pd.Series):
     X[X["time_ahead"] <= 0] = 0
     y = y.loc[X.index]
 
-    means = dict()
-    means["hotel_star_rating"] = np.mean(X[(~X["hotel_star_rating"].isna())
-                                           & (X["hotel_star_rating"] >= 0)
-                                           & (X["hotel_star_rating"] <= 5)]["hotel_star_rating"])
     X.loc[(X["hotel_star_rating"] < 0) |
           (X["hotel_star_rating"] > 5), "hotel_star_rating"] = means["hotel_star_rating"]
 
     for feature in ["original_selling_amount", "time_ahead", "staying_duration", "no_of_people"]:
-        means[feature] = np.mean(X[(~X[feature].isna()) & X[feature] >= 0][feature])
         X.loc[(X[feature].isna()) | (X[feature] < 0), feature] = means[feature]
 
     return X, y
@@ -446,40 +446,60 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     print("Running estimator tester...")
 
     models = {
-        "lda": LinearDiscriminantAnalysis(),
-        "lda1": LinearDiscriminantAnalysis(n_components=1),
+        "xg": XGBClassifier(max_depth=3,
+                            learning_rate=0.2,
+                            n_estimators=500,
+                            subsample=0.8,
+                            colsample_bytree=0.8,
+                            gamma=0.1,
+                            reg_alpha=0.1,
+                            reg_lambda=0.1,
+                            scale_pos_weight=1.0,
+                            eval_metric='logloss'),
+        # "lda": LinearDiscriminantAnalysis(),
+        "lda": LinearDiscriminantAnalysis(n_components=1),
         "forest5": RandomForestClassifier(n_estimators=5),
         "forest50": RandomForestClassifier(n_estimators=50),
-        "forest100": RandomForestClassifier(n_estimators=100),
-        "forest250": RandomForestClassifier(n_estimators=250),
-        "forest500": RandomForestClassifier(n_estimators=500),
-        # "svm": SVC(),
+        # "forest100": RandomForestClassifier(n_estimators=100),
+        # "forest250": RandomForestClassifier(n_estimators=250),
+        # "forest500": RandomForestClassifier(n_estimators=500),
+        "svm": SVC(),
         "tree2": DecisionTreeClassifier(max_depth=2),
-        "tree3": DecisionTreeClassifier(max_depth=3),
-        "tree4": DecisionTreeClassifier(max_depth=4),
+        # "tree3": DecisionTreeClassifier(max_depth=3),
+        # "tree4": DecisionTreeClassifier(max_depth=4),
         "tree5": DecisionTreeClassifier(max_depth=5),
         "ada2_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=2),
-        "ada2_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=4),
-        "ada2_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=5),
+        # "ada2_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=4),
+        # "ada2_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=5),
         "ada2_50": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=50),
-        "ada2_100": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=100),
-        "ada2_500": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=500),
-        "ada2_900": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=900),
-        "ada3_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=2),
-        "ada3_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=4),
-        "ada3_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=5),
-        "ada5_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=2),
-        "ada5_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=4),
-        "ada5_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=5),
-        "logistic_l2_1": LogisticRegression(max_iter=5000, penalty="l2", C=0.1),
+        # "ada2_100": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=100),
+        # "ada2_500": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=500),
+        # "ada2_900": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=900),
+        # "ada3_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=2),
+        # "ada3_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=4),
+        # "ada3_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=5),
+        # "ada5_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=2),
+        # "ada5_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=4),
+        # "ada5_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=5),
+        # "logistic_l2_1": LogisticRegression(max_iter=5000, penalty="l2", C=0.1),
         "logistic_l2_2": LogisticRegression(max_iter=5000, penalty="l2", C=0.2),
-        "logistic_l2_3": LogisticRegression(max_iter=5000, penalty="l2", C=0.3),
-        "logistic_l2_4": LogisticRegression(max_iter=5000, penalty="l2", C=0.4),
-        "logistic_l2_5": LogisticRegression(max_iter=5000, penalty="l2", C=0.5)
+        # "logistic_l2_3": LogisticRegression(max_iter=5000, penalty="l2", C=0.3),
+        # "logistic_l2_4": LogisticRegression(max_iter=5000, penalty="l2", C=0.4),
+        # "logistic_l2_5": LogisticRegression(max_iter=5000, penalty="l2", C=0.5)
     }
 
     best_model_score = 0
     best_model_name = None
+
+    X = X.astype(float)
+
+    # f1_scores_macro = []
+    # f1_scores_binary = []
+    # mse_scores = []
+    # accuracy_scores = []
+
+    scores = {}
+    errors = ["macro", "binary", "mse", "accuracy"]
 
     for name, model in models.items():
         print(f"Testing {name}...")
@@ -494,40 +514,100 @@ def run_estimator_testing(X, y, X_dev, y_dev):
             best_model_score = score
             best_model_name = name
 
+        scores[name] = []
+
+        scores[name].append(f1_score(y_pred, ~y_dev.isna(), average="macro"))
+        scores[name].append(f1_score(y_pred, ~y_dev.isna()))
+        scores[name].append(mean_squared_error(y_pred.astype(int), ~y_dev.isna().astype(int)))
+        scores[name].append(accuracy_score(y_pred, ~y_dev.isna()))
+
     print(f"The best found model is {best_model_name} with a score of {best_model_score}")
+
+    X_axis = np.arange(len(errors))
+    width = 0.1
+
+    plt.figure(figsize=(20, 9))
+
+    xg = scores["xg"]
+    bar_xg = plt.bar(X_axis, xg, width)
+
+    lda = scores["lda"]
+    bar_lda = plt.bar(X_axis+width, lda, width)
+
+    forest5 = scores["forest5"]
+    bar_forest5 = plt.bar(X_axis+width*2, forest5, width)
+
+    forest50 = scores["forest50"]
+    bar_forest50 = plt.bar(X_axis+width*3, forest50, width)
+
+    svm = scores["svm"]
+    bar_svm = plt.bar(X_axis+width*4, svm, width)
+
+    tree2 = scores["tree2"]
+    bar_tree2 = plt.bar(X_axis+width*5, tree2, width)
+
+    tree5 = scores["tree5"]
+    bar_tree5 = plt.bar(X_axis+width*6, tree5, width)
+
+    ada2_2 = scores["ada2_2"]
+    bar_ada2_2 = plt.bar(X_axis+width*7, ada2_2, width)
+
+    ada2_50 = scores["ada2_50"]
+    bar_ada2_50 = plt.bar(X_axis+width*8, ada2_50, width)
+
+    logistic_l2_2 = scores["logistic_l2_2"]
+    bar_logistic_l2_2 = plt.bar(X_axis+width*9, logistic_l2_2, width)
+
+    plt.xlabel("Error Types")
+    plt.ylabel('Score')
+    plt.title("Model Score as function of Error Types")
+
+    plt.xticks(X_axis + width, ['F1 Macro', 'F1 Binary', 'MSE', 'Accuracy'])
+    plt.legend((bar_xg, bar_lda, bar_forest5, bar_forest50, bar_svm, bar_tree2, bar_tree5, bar_ada2_2, bar_ada2_50, bar_logistic_l2_2),
+               ('XGBoost', 'LDA', 'Forest (5)', 'Forest (50)', 'SVM', 'Tree (2)', 'Tree (5)', 'AdaBoost (2)', 'AdaBoost (50)', 'Logistic Regression + L2'))
+
+    plt.savefig("fig.png")
 
 
 def fit_over_dataset():
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
                      parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
-    # X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
-    X_train, X_test, y_train, y_test = split_data(df, include_dev=False)
+    X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
+    # X_train, X_test, y_train, y_test = split_data(df, include_dev=False)
 
     X_train, y_train = preprocess_train(X_train, y_train)
+    X_train = X_train.astype(float)
 
-    # X_dev = preprocess_test(X_dev, X_train.columns.tolist())
-    X_test = preprocess_test(X_test, columns)
+    X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+    # X_test = preprocess_test(X_test, columns)
 
-    # run_estimator_testing(X_train, y_train, X_dev, y_dev)
+    run_estimator_testing(X_train, y_train, X_dev, y_dev)
 
     # Chosen model: Forest with 50 estimators
-    model = RandomForestClassifier(n_estimators=50)
-    model.fit(X_train, ~y_train.isna())
-    print("2")
+    # model = RandomForestClassifier(n_estimators=50)
+    # model = XGBClassifier(max_depth=3,
+    #                       learning_rate=0.2,
+    #                       n_estimators=500,
+    #                       subsample=0.8,
+    #                       colsample_bytree=0.8,
+    #                       gamma=0.1,
+    #                       reg_alpha=0.1,
+    #                       reg_lambda=0.1,
+    #                       scale_pos_weight=1.0,
+    #                       eval_metric='logloss')
+    # model.fit(X_train, ~y_train.isna())
+    #
+    # joblib.dump(model, 'xg500.joblib', compress=9)
+    #
+    # y_pred = model.predict(X_test)
+    #
+    # score = f1_score(y_pred, ~y_test.isna(), average="macro")
+    # print("score is: ", score)
 
-    joblib.dump(model, 'forest50.joblib', compress=9)
-    print("3")
 
-    y_pred = model.predict(X_test)
-    print("4")
-
-    score = f1_score(y_pred, ~y_test.isna(), average="macro")
-    print("score is ", score)
-
-
-def run_task_1(input_file):
-    model = joblib.load("./hackathon_code/forest50.joblib")
+def run_task_1(input_file, output_file):
+    model = joblib.load("./hackathon_code/xg500.joblib")
 
     df = pd.read_csv(input_file, parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
@@ -539,7 +619,7 @@ def run_task_1(input_file):
     result["id"] = df["h_booking_id"]
     result["cancellation"] = y_pred.astype(int)
 
-    result.to_csv("agoda_cancellation_prediction.csv", index=False)
+    result.to_csv(output_file, index=False)
 
 
 if __name__ == "__main__":
