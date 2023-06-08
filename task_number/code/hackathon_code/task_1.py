@@ -93,27 +93,31 @@ def create_linear_features(X):
     # selling amount
     return X
 
-def calculate_worth(time_duration, tuple_info):
-    cancelation_days = tuple_info[0]
-    percent = tuple_info[1]
-    a = max(max(30, cancelation_days*2), time_duration)
-    worth = cancelation_days/a * percent
+def calculate_worth(percent_left, time_duration, cancellation_policy):
+    cancellation_days = cancellation_policy[0]
+    percent = cancellation_policy[1]
+    if time_duration <= cancellation_days:
+        worth = percent
+    else:
+        worth = (cancellation_days/time_duration) * percent * (percent_left / 100.0)
     return worth
     # Use a breakpoint in the code line below to debug your script.
 
 def calculate_total_worth(price ,time_duration , info_tuple_list):
-    sum = 0
-    two_to_the = 1
-    list = []
+    percent_paid = 0
+    scalar = 1
+    policy_list = []
+    percent_left = 100
     for i in range(0, len(info_tuple_list)):
-        list.append(calculate_worth(time_duration, info_tuple_list[i]))
-    list.sort()
-    list.reverse()
-    for i in range(0, len(list)):
-        sum += two_to_the * list[i]
-        two_to_the *= 0.5
-    #sum += 2 * two_to_the * calculate_worth(time_duration, info_tuple_list[-1])
-    return sum/2
+        worth = calculate_worth(percent_left, time_duration, info_tuple_list[i])
+        if worth == info_tuple_list[1]:
+            percent_left -= worth
+        policy_list.append(worth)
+    policy_list.sort(reverse=True)
+    for i in range(0, len(policy_list)):
+        percent_paid += scalar * policy_list[i]
+        scalar *= 0.5
+    return percent_paid
 
 def receive_policy(price, time_duration, nights, policy):
     if(time_duration == 0):
