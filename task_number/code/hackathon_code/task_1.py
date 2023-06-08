@@ -327,9 +327,9 @@ def create_linear_features(X):
     X['staying_duration'] = (X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D')
     X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
 
-    # X['original_selling_amount'] = X.apply(lambda x:
-    #                                        (1 / currencies[x["original_payment_currency"]]) * x[
-    #                                            "original_selling_amount"], axis=1)
+    X['original_selling_amount'] = X.apply(lambda x:
+                                           (1 / currencies[x["original_payment_currency"]]) * x[
+                                               "original_selling_amount"], axis=1)
     return X
 
 
@@ -442,6 +442,7 @@ def preprocess_test(X, features):
     X = create_cancellation_policy_feature(X)
 
     X = clean_data(X, is_test=True)
+
     # Reindexing X - removing columns that are not in the features list
     X = X.reindex(columns=features, fill_value=0)
 
@@ -498,14 +499,10 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     best_model_name = None
 
     X = X.astype(float)
-
-    # f1_scores_macro = []
-    # f1_scores_binary = []
-    # mse_scores = []
-    # accuracy_scores = []
+    X_dev = X_dev.astype(float)
 
     scores = {}
-    errors = ["macro", "binary", "mse", "accuracy"]
+    errors = ["macro", "binary", "accuracy", "mse"]
 
     for name, model in models.items():
         print(f"Testing {name}...")
@@ -524,8 +521,8 @@ def run_estimator_testing(X, y, X_dev, y_dev):
 
         scores[name].append(f1_score(y_pred, ~y_dev.isna(), average="macro"))
         scores[name].append(f1_score(y_pred, ~y_dev.isna()))
-        scores[name].append(mean_squared_error(y_pred.astype(int), ~y_dev.isna().astype(int)))
         scores[name].append(accuracy_score(y_pred, ~y_dev.isna()))
+        scores[name].append(mean_squared_error(y_pred.astype(int), ~y_dev.isna().astype(int)))
 
     print(f"The best found model is {best_model_name} with a score of {best_model_score}")
 
@@ -568,7 +565,7 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     plt.ylabel('Score')
     plt.title("Model Score as function of Error Types")
 
-    plt.xticks(X_axis + width, ['F1 Macro', 'F1 Binary', 'MSE', 'Accuracy'])
+    plt.xticks(X_axis + width, ['F1 Macro', 'F1 Binary', 'Accuracy', 'MSE'])
     plt.legend((bar_xg, bar_lda, bar_forest5, bar_forest50, bar_svm, bar_tree2, bar_tree5, bar_ada2_2, bar_ada2_50, bar_logistic_l2_2),
                ('XGBoost', 'LDA', 'Forest (5)', 'Forest (50)', 'SVM', 'Tree (2)', 'Tree (5)', 'AdaBoost (2)', 'AdaBoost (50)', 'Logistic Regression + L2'))
 
@@ -579,37 +576,57 @@ def fit_over_dataset():
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
                      parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
-    X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
-    # X_train, X_test, y_train, y_test = split_data(df, include_dev=False)
+    # X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
+    X_train, X_test, y_train, y_test = split_data(df, include_dev=False)
 
     X_train, y_train = preprocess_train(X_train, y_train)
     X_train = X_train.astype(float)
 
-    X_dev = preprocess_test(X_dev, X_train.columns.tolist())
-    # X_test = preprocess_test(X_test, columns)
+    # X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+    X_test = preprocess_test(X_test, columns)
+    X_test = X_test.astype(float)
 
-    run_estimator_testing(X_train, y_train, X_dev, y_dev)
+    # run_estimator_testing(X_train, y_train, X_dev, y_dev)
 
-    # Chosen model: Forest with 50 estimators
-    # model = RandomForestClassifier(n_estimators=50)
-    # model = XGBClassifier(max_depth=3,
-    #                       learning_rate=0.2,
-    #                       n_estimators=500,
-    #                       subsample=0.8,
-    #                       colsample_bytree=0.8,
-    #                       gamma=0.1,
-    #                       reg_alpha=0.1,
-    #                       reg_lambda=0.1,
-    #                       scale_pos_weight=1.0,
-    #                       eval_metric='logloss')
-    # model.fit(X_train, ~y_train.isna())
-    #
-    # joblib.dump(model, 'xg500.joblib', compress=9)
-    #
-    # y_pred = model.predict(X_test)
-    #
-    # score = f1_score(y_pred, ~y_test.isna(), average="macro")
-    # print("score is: ", score)
+    # Chosen model: XGBoost with 500 iterations
+    model = XGBClassifier(max_depth=3,
+                          learning_rate=0.2,
+                          n_estimators=500,
+                          subsample=0.8,
+                          colsample_bytree=0.8,
+                          gamma=0.1,
+                          reg_alpha=0.1,
+                          reg_lambda=0.1,
+                          scale_pos_weight=1.0,
+                          eval_metric='logloss')
+    model.fit(X_train, ~y_train.isna())
+
+    joblib.dump(model, 'xg500.joblib', compress=9)
+
+    y_pred = model.predict(X_test)
+
+    importances = model.feature_importances_
+    indices = np.argsort(importances)[::-1]
+
+    top_features = [X_train.columns[i] for i in indices[:5]]
+    top_features_importances = [importances[i] for i in indices[:5]]
+
+    for i in range(5):
+        print(f"The #{i+1} most important feature is {top_features[i]} with importance of {top_features_importances[i]}")
+
+    plt.figure(figsize=(16, 10))
+    plt.pie(top_features_importances, labels=top_features, autopct='%1.1f%%', startangle=90)
+
+    center_circle = plt.Circle((0, 0), 0.70, fc='white')
+    plt.gca().add_artist(center_circle)
+
+    plt.title('Feature Importances\'')
+    plt.axis('equal')
+    plt.tight_layout()
+    plt.savefig("importances.png")
+
+    score = f1_score(y_pred, ~y_test.isna(), average="macro")
+    print("score is: ", score)
 
 
 def run_task_1(input_file, output_file):
