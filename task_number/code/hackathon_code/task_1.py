@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import re
+import joblib
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
@@ -8,6 +9,93 @@ from sklearn.metrics import f1_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import AdaBoostClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+
+columns = ['hotel_star_rating', 'guest_is_not_the_customer', 'no_of_adults', 'original_selling_amount',
+           'is_user_logged_in', 'is_first_booking', 'checkin_month_6', 'checkin_month_7', 'checkin_month_8',
+           'checkin_month_9', 'accommadation_type_name_Apartment', 'accommadation_type_name_Boat / Cruise',
+           'accommadation_type_name_Bungalow', 'accommadation_type_name_Capsule Hotel',
+           'accommadation_type_name_Chalet', 'accommadation_type_name_Guest House / Bed & Breakfast',
+           'accommadation_type_name_Holiday Park / Caravan Park', 'accommadation_type_name_Home',
+           'accommadation_type_name_Homestay', 'accommadation_type_name_Hostel', 'accommadation_type_name_Hotel',
+           'accommadation_type_name_Inn', 'accommadation_type_name_Lodge', 'accommadation_type_name_Love Hotel',
+           'accommadation_type_name_Motel', 'accommadation_type_name_Private Villa', 'accommadation_type_name_Resort',
+           'accommadation_type_name_Resort Villa', 'accommadation_type_name_Ryokan',
+           'accommadation_type_name_Serviced Apartment', 'accommadation_type_name_Tent',
+           'accommadation_type_name_UNKNOWN', 'guest_nationality_country_name_Afghanistan',
+           'guest_nationality_country_name_Albania', 'guest_nationality_country_name_Algeria',
+           'guest_nationality_country_name_Andorra', 'guest_nationality_country_name_Angola',
+           'guest_nationality_country_name_Argentina', 'guest_nationality_country_name_Australia',
+           'guest_nationality_country_name_Austria', 'guest_nationality_country_name_Azerbaijan',
+           'guest_nationality_country_name_Bahamas', 'guest_nationality_country_name_Bahrain',
+           'guest_nationality_country_name_Bangladesh', 'guest_nationality_country_name_Barbados',
+           'guest_nationality_country_name_Belarus', 'guest_nationality_country_name_Belgium',
+           'guest_nationality_country_name_Benin', 'guest_nationality_country_name_Bhutan',
+           'guest_nationality_country_name_Botswana', 'guest_nationality_country_name_Brazil',
+           'guest_nationality_country_name_Brunei Darussalam', 'guest_nationality_country_name_Bulgaria',
+           'guest_nationality_country_name_Burkina Faso', 'guest_nationality_country_name_Cambodia',
+           'guest_nationality_country_name_Cameroon', 'guest_nationality_country_name_Canada',
+           'guest_nationality_country_name_Chile', 'guest_nationality_country_name_China',
+           'guest_nationality_country_name_Colombia', 'guest_nationality_country_name_Costa Rica',
+           "guest_nationality_country_name_Cote D'ivoire", 'guest_nationality_country_name_Croatia',
+           'guest_nationality_country_name_Cyprus', 'guest_nationality_country_name_Czech Republic',
+           'guest_nationality_country_name_Democratic Republic of the Congo', 'guest_nationality_country_name_Denmark',
+           'guest_nationality_country_name_Egypt', 'guest_nationality_country_name_Estonia',
+           'guest_nationality_country_name_Faroe Islands', 'guest_nationality_country_name_Fiji',
+           'guest_nationality_country_name_Finland', 'guest_nationality_country_name_France',
+           'guest_nationality_country_name_French Guiana', 'guest_nationality_country_name_French Polynesia',
+           'guest_nationality_country_name_Gambia', 'guest_nationality_country_name_Georgia',
+           'guest_nationality_country_name_Germany', 'guest_nationality_country_name_Ghana',
+           'guest_nationality_country_name_Greece', 'guest_nationality_country_name_Guam',
+           'guest_nationality_country_name_Guatemala', 'guest_nationality_country_name_Guinea',
+           'guest_nationality_country_name_Hong Kong', 'guest_nationality_country_name_Hungary',
+           'guest_nationality_country_name_Iceland', 'guest_nationality_country_name_India',
+           'guest_nationality_country_name_Indonesia', 'guest_nationality_country_name_Iraq',
+           'guest_nationality_country_name_Ireland', 'guest_nationality_country_name_Isle Of Man',
+           'guest_nationality_country_name_Israel', 'guest_nationality_country_name_Italy',
+           'guest_nationality_country_name_Japan', 'guest_nationality_country_name_Jersey',
+           'guest_nationality_country_name_Jordan', 'guest_nationality_country_name_Kazakhstan',
+           'guest_nationality_country_name_Kenya', 'guest_nationality_country_name_Kuwait',
+           'guest_nationality_country_name_Laos', 'guest_nationality_country_name_Latvia',
+           'guest_nationality_country_name_Lebanon', 'guest_nationality_country_name_Lithuania',
+           'guest_nationality_country_name_Luxembourg', 'guest_nationality_country_name_Macau',
+           'guest_nationality_country_name_Malaysia', 'guest_nationality_country_name_Maldives',
+           'guest_nationality_country_name_Mali', 'guest_nationality_country_name_Malta',
+           'guest_nationality_country_name_Mauritius', 'guest_nationality_country_name_Mexico',
+           'guest_nationality_country_name_Monaco', 'guest_nationality_country_name_Mongolia',
+           'guest_nationality_country_name_Montenegro', 'guest_nationality_country_name_Morocco',
+           'guest_nationality_country_name_Mozambique', 'guest_nationality_country_name_Myanmar',
+           'guest_nationality_country_name_Nepal', 'guest_nationality_country_name_Netherlands',
+           'guest_nationality_country_name_New Caledonia', 'guest_nationality_country_name_New Zealand',
+           'guest_nationality_country_name_Nigeria', 'guest_nationality_country_name_Northern Mariana Islands',
+           'guest_nationality_country_name_Norway', 'guest_nationality_country_name_Oman',
+           'guest_nationality_country_name_Pakistan', 'guest_nationality_country_name_Palestinian Territory',
+           'guest_nationality_country_name_Papua New Guinea', 'guest_nationality_country_name_Peru',
+           'guest_nationality_country_name_Philippines', 'guest_nationality_country_name_Poland',
+           'guest_nationality_country_name_Portugal', 'guest_nationality_country_name_Puerto Rico',
+           'guest_nationality_country_name_Qatar', 'guest_nationality_country_name_Reunion Island',
+           'guest_nationality_country_name_Romania', 'guest_nationality_country_name_Russia',
+           'guest_nationality_country_name_Saudi Arabia', 'guest_nationality_country_name_Senegal',
+           'guest_nationality_country_name_Singapore', 'guest_nationality_country_name_Sint Maarten (Netherlands)',
+           'guest_nationality_country_name_Slovakia', 'guest_nationality_country_name_Slovenia',
+           'guest_nationality_country_name_South Africa', 'guest_nationality_country_name_South Korea',
+           'guest_nationality_country_name_South Sudan', 'guest_nationality_country_name_Spain',
+           'guest_nationality_country_name_Sri Lanka', 'guest_nationality_country_name_Sweden',
+           'guest_nationality_country_name_Switzerland', 'guest_nationality_country_name_Taiwan',
+           'guest_nationality_country_name_Thailand', 'guest_nationality_country_name_Togo',
+           'guest_nationality_country_name_Trinidad & Tobago', 'guest_nationality_country_name_Tunisia',
+           'guest_nationality_country_name_Turkey', 'guest_nationality_country_name_UNKNOWN',
+           'guest_nationality_country_name_Uganda', 'guest_nationality_country_name_Ukraine',
+           'guest_nationality_country_name_United Arab Emirates', 'guest_nationality_country_name_United Kingdom',
+           'guest_nationality_country_name_United States', 'guest_nationality_country_name_Uruguay',
+           'guest_nationality_country_name_Uzbekistan', 'guest_nationality_country_name_Venezuela',
+           'guest_nationality_country_name_Vietnam', 'guest_nationality_country_name_Yemen',
+           'guest_nationality_country_name_Zambia', 'guest_nationality_country_name_Zimbabwe', 'children',
+           'same_country_order', 'existence', 'time_ahead', 'staying_duration', 'no_of_people', 'no_show',
+           'cancellation_policy_30', 'cancellation_policy_21', 'cancellation_policy_14', 'cancellation_policy_7',
+           'cancellation_policy_3', 'cancellation_policy_1']
 
 # Currencies as of 16.8.18
 currencies = {
@@ -184,16 +272,19 @@ currencies = {
 }
 
 
-def split_data(df: pd.DataFrame):
+def split_data(df: pd.DataFrame, include_dev=False):
     # Divide into X and y
     X, y = df.drop(["cancellation_datetime"], axis=1), df["cancellation_datetime"]
 
     # Divide into train, dev and test
     X_train_dev, X_test, y_train_dev, y_test = train_test_split(X, y, test_size=0.25, random_state=0)
 
-    X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.1, random_state=0)
+    if include_dev:
+        X_train, X_dev, y_train, y_dev = train_test_split(X_train_dev, y_train_dev, test_size=0.1, random_state=0)
 
-    return X_train, X_dev, X_test, y_train, y_dev, y_test
+        return X_train, X_dev, X_test, y_train, y_dev, y_test
+
+    return X_train_dev, X_test, y_train_dev, y_test
 
 
 def remove_problematic_samples(X, y):
@@ -231,15 +322,13 @@ def create_linear_features(X):
     X['staying_duration'] = (X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D')
     X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
 
-    X['original_selling_amount'] = X.apply(lambda x:
-                                           (1 / currencies[x["original_payment_currency"]]) * x[
-                                               "original_selling_amount"], axis=1)
+    # X['original_selling_amount'] = X.apply(lambda x:
+    #                                        (1 / currencies[x["original_payment_currency"]]) * x[
+    #                                            "original_selling_amount"], axis=1)
     return X
 
 
 def create_cancellation_policy_feature(X):
-    X['no_show'] = X.apply(lambda x: 1 if re.search(r"[^D](\d+)([PN])", x["cancellation_policy_code"]) else 0, axis=1)
-
     def calculate_penalty(penalty, x):
         if penalty.endswith("P"):
             return int(penalty.split("P")[0]) / 100
@@ -247,6 +336,19 @@ def create_cancellation_policy_feature(X):
         price_per_night = x["original_selling_amount"] / x["staying_duration"]
 
         return (price_per_night * int(penalty.split("N")[0])) / x["original_selling_amount"]
+
+    def calculate_no_show(x):
+        if not re.search(r"[^D](\d+)([PN])", x["cancellation_policy_code"]):
+            return 0
+
+        no_show_penalty = x["cancellation_policy_code"].split("_")[-1]
+
+        if "D" in no_show_penalty:
+            return 0
+
+        return calculate_penalty(no_show_penalty, x)
+
+    X['no_show'] = X.apply(lambda x: calculate_no_show(x), axis=1)
 
     def policy_penalty(x, num):
         all_policies = x["cancellation_policy_code"]
@@ -288,8 +390,9 @@ def remove_redundant_features(X):
 
     return X.drop(['checkin_date', 'checkout_date', 'booking_datetime', 'no_of_children',
                    'hotel_country_code', 'origin_country_code', 'cancellation_policy_code',
-                   'charge_option', 'hotel_chain_code',
+                   'charge_option', 'hotel_chain_code', 'hotel_city_code',
                    'original_payment_type', 'original_payment_method'], axis=1)
+
 
 def clean_data(X: pd.DataFrame, y: pd.Series):
     X = X[X["no_of_adults"] < 20]
@@ -343,6 +446,14 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     print("Running estimator tester...")
 
     models = {
+        "lda": LinearDiscriminantAnalysis(),
+        "lda1": LinearDiscriminantAnalysis(n_components=1),
+        "forest5": RandomForestClassifier(n_estimators=5),
+        "forest50": RandomForestClassifier(n_estimators=50),
+        "forest100": RandomForestClassifier(n_estimators=100),
+        "forest250": RandomForestClassifier(n_estimators=250),
+        "forest500": RandomForestClassifier(n_estimators=500),
+        # "svm": SVC(),
         "tree2": DecisionTreeClassifier(max_depth=2),
         "tree3": DecisionTreeClassifier(max_depth=3),
         "tree4": DecisionTreeClassifier(max_depth=4),
@@ -386,42 +497,52 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     print(f"The best found model is {best_model_name} with a score of {best_model_score}")
 
 
-if __name__ == "__main__":
-    np.random.seed(0)
-
+def fit_over_dataset():
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
                      parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
-    X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
+    # X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
+    X_train, X_test, y_train, y_test = split_data(df, include_dev=False)
 
     X_train, y_train = preprocess_train(X_train, y_train)
 
-    X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+    # X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+    X_test = preprocess_test(X_test, columns)
 
-    # from sklearn.decomposition import PCA
-    # import matplotlib.pyplot as plt
-    # pca = PCA(n_components=2)
-    # transformed_data = pca.fit_transform(X_train)
-    # plt.scatter(transformed_data[:, 0], transformed_data[:, 1], c=~y_train.isna())
-    # plt.title("PCA Visualization")
-    # plt.xlabel("Principal Component 1")
-    # plt.ylabel("Principal Component 2")
-    # plt.show()
+    # run_estimator_testing(X_train, y_train, X_dev, y_dev)
 
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-    from sklearn.manifold import TSNE
-    tsne = TSNE(n_components=3, perplexity=30, learning_rate=200)
-    transformed_data = tsne.fit_transform(X_train)
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(transformed_data[:, 0], transformed_data[:, 1], transformed_data[:, 2], c=~y_train.isna())
-    ax.set_title("t-SNE 3D Visualization")
-    ax.set_xlabel("Dimension 1")
-    ax.set_ylabel("Dimension 2")
-    ax.set_zlabel("Dimension 3")
-    plt.show()
+    # Chosen model: Forest with 50 estimators
+    model = RandomForestClassifier(n_estimators=50)
+    model.fit(X_train, ~y_train.isna())
+    print("2")
 
-    run_estimator_testing(X_train, y_train, X_dev, y_dev)
+    joblib.dump(model, 'forest50.joblib', compress=9)
+    print("3")
 
-    # export_csv()
+    y_pred = model.predict(X_test)
+    print("4")
+
+    score = f1_score(y_pred, ~y_test.isna(), average="macro")
+    print("score is ", score)
+
+
+def run_task_1(input_file):
+    model = joblib.load("./hackathon_code/forest50.joblib")
+
+    df = pd.read_csv(input_file, parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
+
+    X = preprocess_test(df, columns)
+
+    y_pred = model.predict(X)
+
+    result = pd.DataFrame()
+    result["id"] = df["h_booking_id"]
+    result["cancellation"] = y_pred.astype(int)
+
+    result.to_csv("agoda_cancellation_prediction.csv", index=False)
+
+
+if __name__ == "__main__":
+    np.random.seed(0)
+
+    fit_over_dataset()
