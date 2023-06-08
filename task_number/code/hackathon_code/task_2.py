@@ -2,19 +2,21 @@ import numpy as np
 import pandas as pd
 import re
 
+import sklearn.linear_model
 from sklearn.model_selection import train_test_split
-from sklearn.decomposition import PCA
+from sklearn.pipeline import make_pipeline
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
 
 from sklearn import svm
 from sklearn.datasets import make_classification
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, mean_squared_error, make_scorer
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
 import matplotlib.pyplot as plt
 
@@ -198,17 +200,19 @@ def clean_data(X: pd.DataFrame, y: pd.Series):
     X = X[X["time_ahead"] >= -1]
     X[X["time_ahead"] <= 0] = 0
     y = y.loc[X.index]
+    X["request_highfloor"] = X["request_highfloor"].fillna(0)
+    X["request_largebed"] = X["request_largebed"].fillna(0)
+    X["request_twinbeds"] = X["request_twinbeds"].fillna(0)
+    X["request_airport"] = X["request_airport"].fillna(0)
 
     means = dict()
     means["hotel_star_rating"] = np.mean(X[(~X["hotel_star_rating"].isna())
                                            & (X["hotel_star_rating"] >= 0)
-                                           & (X["hotel_star_rating"] <= 5)
-                                           & (X["hotel_star_rating"] % 0.5 == 0)]["hotel_star_rating"])
+                                           & (X["hotel_star_rating"] <= 5)]["hotel_star_rating"])
     X.loc[(X["hotel_star_rating"] < 0) |
-          (X["hotel_star_rating"] > 5) |
-          (X["hotel_star_rating"] % 0.5 != 0), "hotel_star_rating"] = means["hotel_star_rating"]
+          (X["hotel_star_rating"] > 5), "hotel_star_rating"] = means["hotel_star_rating"]
 
-    for feature in ["original_selling_amount", "time_ahead", "staying_duration", "no_of_people"]:
+    for feature in ["time_ahead", "staying_duration", "no_of_people"]:
         means[feature] = np.mean(X[(~X[feature].isna()) & X[feature] >= 0][feature])
         X.loc[(X[feature].isna()) | (X[feature] < 0), feature] = means[feature]
 
@@ -217,7 +221,12 @@ def clean_data(X: pd.DataFrame, y: pd.Series):
 
 def split_data(df: pd.DataFrame):
     # Divide into X and y
-    X, y = df.drop(["cancellation_datetime"], axis=1), df["cancellation_datetime"]
+    df["original_selling_amount"] = df.apply(
+        lambda x: (1 / currencies[x["original_payment_currency"]]) * x["original_selling_amount"], axis=1)
+
+    cancellation_datetime = df["cancellation_datetime"]
+    X, y = df.drop(["original_selling_amount", "cancellation_datetime"], axis=1), df["original_selling_amount"]
+    y = pd.Series(np.where(cancellation_datetime.isna(), -1, y))
 
     # Divide into train, dev and test
     X_train_dev, X_test, y_train_dev, y_test = train_test_split(X, y, test_size=0.25, random_state=0)
@@ -230,9 +239,10 @@ def split_data(df: pd.DataFrame):
 def remove_redundant_features(X):
     X = X.drop(['h_booking_id', 'hotel_id', 'hotel_area_code', 'hotel_chain_code', 'hotel_live_date', 'h_customer_id',
                 'customer_nationality', 'guest_is_not_the_customer', 'language', 'guest_nationality_country_name',
-                'origin_country_name', 'origin_payment_type', 'is_user_logged_in', 'is_first_booking',
+                'origin_country_code', 'original_payment_type', 'is_user_logged_in', 'is_first_booking',
                 'request_nonesmoke', 'request_latecheckin', 'request_earlycheckin', 'charge_option',
-                'cancellation_policy_code'], axis=1)
+                'cancellation_policy_code', 'original_payment_currency', 'original_payment_method',
+                'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime'], axis=1)
 
     return X
 
@@ -243,9 +253,7 @@ def create_dummy_features(X):
     X = pd.get_dummies(X, prefix='checkin_month', columns=['checkin_month'])
     X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
     X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
-    X = pd.get_dummies(X, prefix='hotel_country_name', columns=['hotel_country_name'])
-    X = pd.get_dummies(X, prefix='original_payment_method', columns=['original_payment_method'])
-    X = pd.get_dummies(X, prefix='original_payment_currency', columns=['original_payment_currency'])
+    X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
 
     return X
 
@@ -267,8 +275,8 @@ def create_linear_features(X):
 
     return X
 
-def preprocess_train(X, y):
 
+def preprocess_train(X, y):
     X = create_dummy_features(X)
     X = create_boolean_features(X)
     X = create_linear_features(X)
@@ -302,3 +310,21 @@ if __name__ == "__main__":
     X_train, y_train = preprocess_train(X_train, y_train)
 
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+
+    def rmse(y_true, y_pred):
+        y_pred[y_pred < 0] = -1
+        mse = mean_squared_error(y_true, y_pred)
+        rmse = np.sqrt(mse)
+        return -rmse
+
+    # Use custom RMSE scoring function with make_scorer
+    rmse_scorer = make_scorer(rmse, greater_is_better=False)
+
+    for alpha in np.linspace(0.1,1, 10):
+        # alpha = 3.5 for 172.5
+        print(f"checking alpha {alpha}")
+        model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
+        scores = cross_val_score(model, X_train[:10000], y_train[:10000], cv=5, scoring=rmse_scorer)
+
+        print(f"score for linear regression (depth {alpha}, cv {5}) is:", np.round(scores, 2), " Mean: ",
+              np.mean(scores))
