@@ -449,6 +449,7 @@ def preprocess_test(X, features):
     return X
 
 
+# ===== Testing & Plotting =====
 def run_estimator_testing(X, y, X_dev, y_dev):
     print("Running estimator tester...")
 
@@ -572,21 +573,64 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     plt.savefig("fig.png")
 
 
+def run_top_features_compare(X, y, X_dev, y_dev):
+    model = XGBClassifier(max_depth=3,
+                  learning_rate=0.2,
+                  n_estimators=500,
+                  subsample=0.8,
+                  colsample_bytree=0.8,
+                  gamma=0.1,
+                  reg_alpha=0.1,
+                  reg_lambda=0.1,
+                  scale_pos_weight=1.0,
+                  eval_metric='logloss')
+
+    # Run over the pre-processed X with only the top important features
+    X_top_important = X[["cancellation_policy_21", "cancellation_policy_30", "no_of_adults", "time_ahead", "cancellation_policy_14"]]
+    X_dev_top_important = X_dev[["cancellation_policy_21", "cancellation_policy_30", "no_of_adults", "time_ahead", "cancellation_policy_14"]]
+
+    percentages = np.arange(1, 100, 1)
+
+    top_important_scores_train = np.zeros(shape=(99, ))
+    top_important_scores_test = np.zeros(shape=(99, ))
+
+    for index, percentage in enumerate(percentages):
+        print(index)
+
+        size = int((percentage / 100) * len(X))
+        model.fit(X_top_important[:size], (~y.isna())[:size])
+
+        top_important_scores_train[index-1] = f1_score(model.predict(X_top_important), ~y.isna(), average="macro")
+        top_important_scores_test[index-1] = f1_score(model.predict(X_dev_top_important), ~y_dev.isna(), average="macro")
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(percentages, top_important_scores_test, label='Test set (Top 5 features)')
+    plt.plot(percentages, top_important_scores_train, label='Train set (Top 5 features)')
+
+    plt.xlabel('Percentage of train size')
+    plt.ylabel('F1 Macro Score')
+    plt.title('F1 Macro Score as a function of Train set size')
+    plt.legend()
+
+    plt.savefig("train_vs_test.png")
+
+
+# ===== Main ======
 def fit_over_dataset():
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
                      parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
     # X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
-    X_train, X_test, y_train, y_test = split_data(df, include_dev=False)
+    X_train, y_train = df.drop(["cancellation_datetime"], axis=1), df["cancellation_datetime"]
 
     X_train, y_train = preprocess_train(X_train, y_train)
     X_train = X_train.astype(float)
 
     # X_dev = preprocess_test(X_dev, X_train.columns.tolist())
-    X_test = preprocess_test(X_test, columns)
-    X_test = X_test.astype(float)
+    # X_dev = X_dev.astype(float)
 
     # run_estimator_testing(X_train, y_train, X_dev, y_dev)
+    # run_top_features_compare(X_train, y_train, X_dev, y_dev)
 
     # Chosen model: XGBoost with 500 iterations
     model = XGBClassifier(max_depth=3,
@@ -602,31 +646,6 @@ def fit_over_dataset():
     model.fit(X_train, ~y_train.isna())
 
     joblib.dump(model, 'xg500.joblib', compress=9)
-
-    y_pred = model.predict(X_test)
-
-    importances = model.feature_importances_
-    indices = np.argsort(importances)[::-1]
-
-    top_features = [X_train.columns[i] for i in indices[:5]]
-    top_features_importances = [importances[i] for i in indices[:5]]
-
-    for i in range(5):
-        print(f"The #{i+1} most important feature is {top_features[i]} with importance of {top_features_importances[i]}")
-
-    plt.figure(figsize=(16, 10))
-    plt.pie(top_features_importances, labels=top_features, autopct='%1.1f%%', startangle=90)
-
-    center_circle = plt.Circle((0, 0), 0.70, fc='white')
-    plt.gca().add_artist(center_circle)
-
-    plt.title('Feature Importances\'')
-    plt.axis('equal')
-    plt.tight_layout()
-    plt.savefig("importances.png")
-
-    score = f1_score(y_pred, ~y_test.isna(), average="macro")
-    print("score is: ", score)
 
 
 def run_task_1(input_file, output_file):
