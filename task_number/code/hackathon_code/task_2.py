@@ -193,7 +193,10 @@ currencies = {
     "ZMW": 20.01214,
     "ZWL": 322
 }
-
+means = {'hotel_star_rating': 2.7379305082159027,
+         'time_ahead': 30.059532563322083,
+         'staying_duration': 1.783537671058656,
+         'no_of_people': 2.1357277305794375}
 
 def clean_data(X: pd.DataFrame, y: pd.Series):
     X = X[X["no_of_people"] < 20]
@@ -225,7 +228,7 @@ def split_data(df: pd.DataFrame):
         lambda x: (1 / currencies[x["original_payment_currency"]]) * x["original_selling_amount"], axis=1)
 
     cancellation_datetime = df["cancellation_datetime"]
-    X, y = df.drop(["original_selling_amount", "cancellation_datetime"], axis=1), df["original_selling_amount"]
+    X, y = df.drop(["original_selling_amount"], axis=1), df["original_selling_amount"]
     y = pd.Series(np.where(cancellation_datetime.isna(), -1, y))
 
     # Divide into train, dev and test
@@ -242,7 +245,7 @@ def remove_redundant_features(X):
                 'origin_country_code', 'original_payment_type', 'is_user_logged_in', 'is_first_booking',
                 'request_nonesmoke', 'request_latecheckin', 'request_earlycheckin', 'charge_option',
                 'cancellation_policy_code', 'original_payment_currency', 'original_payment_method',
-                'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime',"hotel_brand_code","no_of_adults", "no_of_children"], axis=1)
+                'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime',"hotel_brand_code","no_of_adults", "no_of_children","cancellation_datetime"], axis=1)
 
     return X
 
@@ -274,12 +277,23 @@ def create_linear_features(X):
     # selling amount
 
     return X
+def fill_na(X):
+    for feature in ["request_airport", "request_twinbeds", "request_largebed", "request_highfloor"]:
+        X[X[feature].isna()] = 0
+
+    X.loc[(X["hotel_star_rating"] < 0) |
+          (X["hotel_star_rating"] > 5), "hotel_star_rating"] = means["hotel_star_rating"]
+
+    for feature in [ "time_ahead", "staying_duration", "no_of_people"]:
+        X.loc[(X[feature].isna()) | (X[feature] < 0), feature] = means[feature]
+    return X
+
 
 
 def preprocess_train(X, y):
-    X = create_dummy_features(X)
     X = create_boolean_features(X)
     X = create_linear_features(X)
+    X = create_dummy_features(X)
 
     X = remove_redundant_features(X)
 
@@ -292,6 +306,8 @@ def preprocess_test(X, features):
     X = create_boolean_features(X)
     X = create_linear_features(X)
     X = create_dummy_features(X)
+    X = remove_redundant_features(X)
+    X = fill_na(X)
 
     # Reindexing X - removing columns that are not in the features list
     X = X.reindex(columns=features, fill_value=0)
@@ -304,13 +320,16 @@ if __name__ == "__main__":
 
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
                      parse_dates=['booking_datetime', 'checkin_date', 'checkout_date'])
+    cancellation_datetime = df["cancellation_datetime"]
 
     X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
 
     X_train, y_train = preprocess_train(X_train, y_train)
 
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+    cancellation_datetime = cancellation_datetime.loc[X_dev.index]
     def rmse(y_true, y_pred):
+
         y_pred[y_pred < 0] = -1
         mse = mean_squared_error(y_true, y_pred)
         rmse = np.sqrt(mse)
@@ -318,14 +337,20 @@ if __name__ == "__main__":
 
     rmse_scorer = make_scorer(rmse, greater_is_better=False)
     corr_data = X_train.copy()
-    corr_data["answers"] = y_train
-    corr = corr_data[["answers","time_ahead",'staying_duration', 'no_of_people', 'hotel_star_rating']].corr()
-    for alpha in np.linspace(1,50, 50):
-        # alpha = 3.5 for 172.5
-        print(f"checking alpha {alpha}")
-        # model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
-        model = Ridge(alpha=alpha)
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring=rmse_scorer)
-
-        print(f"score for linear regression (depth {alpha}, cv {5}) is:", np.round(scores, 2), " Mean: ",
-              np.mean(scores))
+    # corr_data["answers"] = y_train
+    # corr = corr_data[["answers","time_ahead",'staying_duration', 'no_of_people', 'hotel_star_rating']].corr()
+    model = Ridge(alpha=3.5)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_dev)
+    y_pred[cancellation_datetime.isna()] = -1
+    y_pred[y_pred < 0] = -1
+    print(-rmse(y_dev, y_pred))
+    # for alpha in np.linspace(1,50, 50):
+    #     # alpha = 3.5 for 172.5
+    #     print(f"checking alpha {alpha}")
+    #     # model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
+    #     model = Ridge(alpha=alpha)
+    #     scores = cross_val_score(model, X_train, y_train, cv=5, scoring=rmse_scorer)
+    #
+    #     print(f"score for linear regression (depth {alpha}, cv {5}) is:", np.round(scores, 2), " Mean: ",
+    #           np.mean(scores))
