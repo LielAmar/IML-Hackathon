@@ -317,13 +317,13 @@ if __name__ == "__main__":
         rmse = np.sqrt(mse)
         return -rmse
 
-    # Use custom RMSE scoring function with make_scorer
     rmse_scorer = make_scorer(rmse, greater_is_better=False)
 
-    for alpha in np.linspace(0.1,1, 10):
+    for alpha in np.linspace(0.1,50, 50):
         # alpha = 3.5 for 172.5
         print(f"checking alpha {alpha}")
         model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
+        # model = Ridge(alpha=alpha)
         scores = cross_val_score(model, X_train[:10000], y_train[:10000], cv=5, scoring=rmse_scorer)
 
         print(f"score for linear regression (depth {alpha}, cv {5}) is:", np.round(scores, 2), " Mean: ",
