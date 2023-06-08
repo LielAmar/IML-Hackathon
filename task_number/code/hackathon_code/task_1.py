@@ -3,192 +3,184 @@ import pandas as pd
 import re
 
 from sklearn.model_selection import train_test_split
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
-from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import f1_score
 
-from sklearn import svm
-from sklearn.datasets import make_classification
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import AdaBoostClassifier
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import AdaBoostClassifier
 
-import matplotlib.pyplot as plt
-
-# Currencies as of 8.6.23 12:45
+# Currencies as of 16.8.18
 currencies = {
-    "AED": 3.673,
-    "AFN": 86.517226,
-    "ALL": 99.967307,
-    "AMD": 385.305018,
-    "ANG": 1.801542,
-    "AOA": 612.5,
-    "ARS": 243.555608,
-    "AUD": 1.495317,
-    "AWG": 1.8025,
-    "AZN": 1.7,
-    "BAM": 1.826417,
+    "AED": 3.673181,
+    "AFN": 72.823258,
+    "ALL": 110.58,
+    "AMD": 482.840272,
+    "ANG": 1.843953,
+    "AOA": 270.3925,
+    "ARS": 29.724,
+    "AUD": 1.3776,
+    "AWG": 1.7925,
+    "AZN": 1.7025,
+    "BAM": 1.72015,
     "BBD": 2,
-    "BDT": 108.036662,
-    "BGN": 1.82618,
-    "BHD": 0.376975,
-    "BIF": 2824.740732,
+    "BDT": 84.453473,
+    "BGN": 1.71989,
+    "BHD": 0.377088,
+    "BIF": 1772.564836,
     "BMD": 1,
-    "BND": 1.347098,
-    "BOB": 6.914198,
-    "BRL": 4.9242,
+    "BND": 1.51076,
+    "BOB": 6.90853,
+    "BRL": 3.905406,
     "BSD": 1,
-    "BTC": 0.000037812887,
-    "BTN": 82.558899,
-    "BWP": 13.558388,
-    "BYN": 2.525657,
-    "BZD": 2.016902,
-    "CAD": 1.33352,
-    "CDF": 2326.572701,
-    "CHF": 0.908657,
-    "CLF": 0.028699,
-    "CLP": 791.88,
-    "CNH": 7.1406,
-    "CNY": 7.1292,
-    "COP": 4215.212601,
-    "CRC": 536.796676,
+    "BTC": 0.000158408561,
+    "BTN": 70.250498,
+    "BWP": 10.8055,
+    "BYN": 2.0534,
+    "BZD": 2.008866,
+    "CAD": 1.31605,
+    "CDF": 1626.551914,
+    "CHF": 0.997384,
+    "CLF": 0.02338,
+    "CLP": 669.261521,
+    "CNH": 6.868637,
+    "CNY": 6.88415,
+    "COP": 3047.975024,
+    "CRC": 567.12861,
     "CUC": 1,
-    "CUP": 25.75,
-    "CVE": 102.965915,
-    "CZK": 22.032323,
-    "DJF": 178.157609,
-    "DKK": 6.94539,
-    "DOP": 54.751049,
-    "DZD": 136.588851,
-    "EGP": 30.949796,
-    "ERN": 15,
-    "ETB": 54.37007,
-    "EUR": 0.932236,
-    "FJD": 2.22975,
-    "FKP": 0.801419,
-    "GBP": 0.801419,
-    "GEL": 2.615,
-    "GGP": 0.801419,
-    "GHS": 11.307011,
-    "GIP": 0.801419,
-    "GMD": 59.445,
-    "GNF": 8604.04959,
-    "GTQ": 7.834971,
-    "GYD": 211.628268,
-    "HKD": 7.836742,
-    "HNL": 24.702068,
-    "HRK": 7.024398,
-    "HTG": 139.578133,
-    "HUF": 344.398428,
-    "IDR": 14887.174315,
-    "ILS": 3.662767,
-    "IMP": 0.801419,
-    "INR": 82.554664,
-    "IQD": 1310.828226,
-    "IRR": 42312.5,
-    "ISK": 140.13,
-    "JEP": 0.801419,
-    "JMD": 154.94408,
-    "JOD": 0.7101,
-    "JPY": 139.73203846,
-    "KES": 139.2,
-    "KGS": 87.3849,
-    "KHR": 4126.05406,
-    "KMF": 460.499925,
+    "CUP": 25.5,
+    "CVE": 97.3,
+    "CZK": 22.6324,
+    "DJF": 178,
+    "DKK": 6.557082,
+    "DOP": 49.876505,
+    "DZD": 119.029816,
+    "EGP": 17.902,
+    "ERN": 14.9965,
+    "ETB": 27.568,
+    "EUR": 0.879356,
+    "FJD": 2.116905,
+    "FKP": 0.786624,
+    "GBP": 0.786624,
+    "GEL": 2.482717,
+    "GGP": 0.786624,
+    "GHS": 4.874117,
+    "GIP": 0.786624,
+    "GMD": 48.16,
+    "GNF": 9036.151169,
+    "GTQ": 7.4894,
+    "GYD": 209.103315,
+    "HKD": 7.84972,
+    "HNL": 24.03,
+    "HRK": 6.5276,
+    "HTG": 67.3475,
+    "HUF": 284.843812,
+    "IDR": 14344.516583,
+    "ILS": 3.67127,
+    "IMP": 0.786624,
+    "INR": 70.015,
+    "IQD": 1191.56269,
+    "IRR": 43163.26868,
+    "ISK": 108.329847,
+    "JEP": 0.786624,
+    "JMD": 135.5825,
+    "JOD": 0.709503,
+    "JPY": 111.01484,
+    "KES": 100.790129,
+    "KGS": 68.137481,
+    "KHR": 4070.169979,
+    "KMF": 432.952376,
     "KPW": 900,
-    "KRW": 1301.967716,
-    "KWD": 0.3075,
-    "KYD": 0.833824,
-    "KZT": 445.823822,
-    "LAK": 18161.966732,
-    "LBP": 15018.79313,
-    "LKR": 292.188326,
-    "LRD": 171.100041,
-    "LSL": 19.059906,
-    "LYD": 4.827007,
-    "MAD": 10.212357,
-    "MDL": 17.840967,
-    "MGA": 4427.326549,
-    "MKD": 57.436224,
-    "MMK": 2101.324837,
-    "MNT": 3519,
-    "MOP": 8.082364,
-    "MRU": 34.398833,
-    "MUR": 46.150001,
-    "MVR": 15.35,
-    "MWK": 1022.597647,
-    "MXN": 17.344193,
-    "MYR": 4.6185,
-    "MZN": 63.850001,
-    "NAD": 19.21,
-    "NGN": 461.68,
-    "NIO": 36.595558,
-    "NOK": 10.98545,
-    "NPR": 131.960419,
-    "NZD": 1.645829,
-    "OMR": 0.385033,
+    "KRW": 1127.32,
+    "KWD": 0.303322,
+    "KYD": 0.832898,
+    "KZT": 360.032943,
+    "LAK": 8518.942724,
+    "LBP": 1511,
+    "LKR": 160.413162,
+    "LRD": 154.549609,
+    "LSL": 14.255,
+    "LYD": 1.392443,
+    "MAD": 9.5652,
+    "MDL": 16.632113,
+    "MGA": 3324.709248,
+    "MKD": 54.135,
+    "MMK": 1527.15,
+    "MNT": 2442.166667,
+    "MOP": 8.0806,
+    "MRO": 357.5,
+    "MRU": 35.95,
+    "MUR": 34.850029,
+    "MVR": 15.459996,
+    "MWK": 727.203141,
+    "MXN": 18.998056,
+    "MYR": 4.1055,
+    "MZN": 58.989229,
+    "NAD": 14.537382,
+    "NGN": 361.020294,
+    "NIO": 31.871276,
+    "NOK": 8.481203,
+    "NPR": 112.403423,
+    "NZD": 1.518912,
+    "OMR": 0.38496,
     "PAB": 1,
-    "PEN": 3.678981,
-    "PGK": 3.552169,
-    "PHP": 56.126494,
-    "PKR": 287.049298,
-    "PLN": 4.184877,
-    "PYG": 7249.42017,
-    "QAR": 3.641,
-    "RON": 4.6241,
-    "RSD": 109.292794,
-    "RUB": 82.010007,
-    "RWF": 1132.533874,
-    "SAR": 3.750543,
-    "SBD": 8.334167,
-    "SCR": 13.247405,
-    "SDG": 601.5,
-    "SEK": 10.890057,
-    "SGD": 1.346624,
-    "SHP": 0.801419,
-    "SLL": 17665,
-    "SOS": 568.334757,
-    "SRD": 37.5885,
-    "SSP": 130.26,
-    "STD": 22823.990504,
-    "STN": 22.878594,
-    "SVC": 8.755661,
-    "SYP": 2512.53,
-    "SZL": 19.050287,
-    "THB": 34.834,
-    "TJS": 10.931596,
-    "TMT": 3.51,
-    "TND": 3.1105,
-    "TOP": 2.368232,
-    "TRY": 23.3494,
-    "TTD": 6.787132,
-    "TWD": 30.724498,
-    "TZS": 2365,
-    "UAH": 36.912126,
-    "UGX": 3737.25347,
+    "PEN": 3.312,
+    "PGK": 3.311548,
+    "PHP": 53.425938,
+    "PKR": 122.755692,
+    "PLN": 3.78625,
+    "PYG": 5750.35,
+    "QAR": 3.641064,
+    "RON": 4.0961,
+    "RSD": 103.760733,
+    "RUB": 66.8698,
+    "RWF": 877.665,
+    "SAR": 3.7507,
+    "SBD": 7.88911,
+    "SCR": 13.588838,
+    "SDG": 17.990205,
+    "SEK": 9.194411,
+    "SGD": 1.37585,
+    "SHP": 0.786624,
+    "SLL": 6542.71,
+    "SOS": 578.345,
+    "SRD": 7.458,
+    "SSP": 130.2634,
+    "STD": 21050.59961,
+    "STN": 21.575,
+    "SVC": 8.745692,
+    "SYP": 514.97999,
+    "SZL": 14.537219,
+    "THB": 33.195021,
+    "TJS": 9.419687,
+    "TMT": 3.509961,
+    "TND": 2.769793,
+    "TOP": 2.310538,
+    "TRY": 5.852199,
+    "TTD": 6.736358,
+    "TWD": 30.76086,
+    "TZS": 2286.489273,
+    "UAH": 27.619953,
+    "UGX": 3751.002075,
     "USD": 1,
-    "UYU": 39.008022,
-    "UZS": 11460.130376,
-    "VES": 26.670432,
-    "VND": 23496.241899,
-    "VUV": 118.979,
-    "WST": 2.72551,
-    "XAF": 611.506725,
-    "XAG": 0.04208763,
-    "XAU": 0.00051321,
+    "UYU": 31.573521,
+    "UZS": 7791.674003,
+    "VEF": 141572.666667,
+    "VND": 23114.085172,
+    "VUV": 108.499605,
+    "WST": 2.588533,
+    "XAF": 576.819847,
+    "XAG": 0.06772851,
+    "XAU": 0.00084235,
     "XCD": 2.70255,
-    "XDR": 0.749213,
-    "XOF": 611.506725,
-    "XPD": 0.00073207,
-    "XPF": 111.245345,
-    "XPT": 0.00097744,
-    "YER": 250.349961,
-    "ZAR": 18.924807,
-    "ZMW": 20.01214,
-    "ZWL": 322
+    "XDR": 0.717117,
+    "XOF": 576.819847,
+    "XPD": 0.00101,
+    "XPF": 104.935106,
+    "XPT": 0.00127078,
+    "YER": 250.3,
+    "ZAR": 14.56358,
+    "ZMW": 10.218987,
+    "ZWL": 322.355011
 }
 
 
@@ -220,34 +212,28 @@ def create_dummy_features(X):
     # X = pd.get_dummies(X, prefix='original_payment_type', columns=['original_payment_type'])
     # X = pd.get_dummies(X, prefix="charge_option", columns=["charge_option"])
 
-    X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
-    X = pd.get_dummies(X, prefix='hotel_chain_code', columns=['hotel_chain_code'])
+    # X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
+    # X = pd.get_dummies(X, prefix='hotel_chain_code', columns=['hotel_chain_code'])
     X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
 
     return X
 
 
 def create_boolean_features(X):
-    # X['children'] = (X['no_of_children'] > 0)
-    # X['same_country_order'] = (X['hotel_country_code'] == X['origin_country_code'])
-    # guest is not the customer
-    # logged in
-    # first booking
+    X['children'] = (X['no_of_children'] > 0)
+    X['same_country_order'] = (X['hotel_country_code'] == X['origin_country_code'])
     return X
 
 
 def create_linear_features(X):
-    X['existence'] = np.round((X['hotel_live_date'] - X['booking_datetime']) / np.timedelta64(1, 'D'))
-    X['time_ahead'] = np.round((X['checkin_date'] - X['booking_datetime']) / np.timedelta64(1, 'D'))
-    X['staying_duration'] = np.round((X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D'))
+    X['existence'] = (X['hotel_live_date'] - X['booking_datetime']) / np.timedelta64(1, 'D')
+    X['time_ahead'] = (X['checkin_date'] - X['booking_datetime']) / np.timedelta64(1, 'D')
+    X['staying_duration'] = (X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D')
     X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
 
     X['original_selling_amount'] = X.apply(lambda x:
                                            (1 / currencies[x["original_payment_currency"]]) * x[
                                                "original_selling_amount"], axis=1)
-    # star rating
-    # no of adults
-
     return X
 
 
@@ -276,40 +262,34 @@ def create_cancellation_policy_feature(X):
             data = policy.split("D")
             days, penalty = int(data[0]), data[1]
 
-            if days < num:
-                continue
-
-            if days > recent:
+            if days < num or days > recent:
                 continue
 
             recent = days
-
             max_penalty = max(calculate_penalty(penalty, x), max_penalty)
 
         return max_penalty
 
     X["cancellation_policy_30"] = X.apply(lambda x: policy_penalty(x, 30), axis=1)
+    X["cancellation_policy_21"] = X.apply(lambda x: policy_penalty(x, 21), axis=1)
     X["cancellation_policy_14"] = X.apply(lambda x: policy_penalty(x, 14), axis=1)
     X["cancellation_policy_7"] = X.apply(lambda x: policy_penalty(x, 7), axis=1)
+    X["cancellation_policy_3"] = X.apply(lambda x: policy_penalty(x, 3), axis=1)
     X["cancellation_policy_1"] = X.apply(lambda x: policy_penalty(x, 1), axis=1)
 
     return X
 
 
 def remove_redundant_features(X):
-    X = X.drop(['h_booking_id', 'hotel_id', 'hotel_area_code', 'hotel_live_date', 'h_customer_id',
+    X = X.drop(['h_booking_id', 'hotel_id', 'hotel_area_code', 'hotel_brand_code', 'hotel_live_date', 'h_customer_id',
                 'customer_nationality', 'no_of_extra_bed', 'no_of_room', 'language', 'original_payment_currency',
                 'request_nonesmoke', 'request_latecheckin', 'request_highfloor', 'request_largebed',
                 'request_twinbeds', 'request_airport', 'request_earlycheckin'], axis=1)
 
     return X.drop(['checkin_date', 'checkout_date', 'booking_datetime', 'no_of_children',
                    'hotel_country_code', 'origin_country_code', 'cancellation_policy_code',
-                   'original_payment_method', 'original_payment_type', 'charge_option',
-                   'hotel_brand_code'], axis=1)
-
- # X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
-    # X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code']) chain
-    # X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
+                   'charge_option', 'hotel_chain_code',
+                   'original_payment_type', 'original_payment_method'], axis=1)
 
 def clean_data(X: pd.DataFrame, y: pd.Series):
     X = X[X["no_of_adults"] < 20]
@@ -321,11 +301,9 @@ def clean_data(X: pd.DataFrame, y: pd.Series):
     means = dict()
     means["hotel_star_rating"] = np.mean(X[(~X["hotel_star_rating"].isna())
                                            & (X["hotel_star_rating"] >= 0)
-                                           & (X["hotel_star_rating"] <= 5)
-                                           & (X["hotel_star_rating"] % 0.5 == 0)]["hotel_star_rating"])
+                                           & (X["hotel_star_rating"] <= 5)]["hotel_star_rating"])
     X.loc[(X["hotel_star_rating"] < 0) |
-          (X["hotel_star_rating"] > 5) |
-          (X["hotel_star_rating"] % 0.5 != 0), "hotel_star_rating"] = means["hotel_star_rating"]
+          (X["hotel_star_rating"] > 5), "hotel_star_rating"] = means["hotel_star_rating"]
 
     for feature in ["original_selling_amount", "time_ahead", "staying_duration", "no_of_people"]:
         means[feature] = np.mean(X[(~X[feature].isna()) & X[feature] >= 0][feature])
@@ -361,74 +339,51 @@ def preprocess_test(X, features):
     return X
 
 
-def run_estimator_testing(X_dev, y_dev):
-    # print("Running tests...")
+def run_estimator_testing(X, y, X_dev, y_dev):
+    print("Running estimator tester...")
 
-    # Logistic Regression
-    # model = LogisticRegression()
-    # scores = cross_val_score(model, X_dev[:1000], (~y_dev.isna())[:1000], cv=5, scoring="f1")
-    # print("score for logistic regression is:", scores, " Mean: ", np.mean(scores))
+    models = {
+        "tree2": DecisionTreeClassifier(max_depth=2),
+        "tree3": DecisionTreeClassifier(max_depth=3),
+        "tree4": DecisionTreeClassifier(max_depth=4),
+        "tree5": DecisionTreeClassifier(max_depth=5),
+        "ada2_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=2),
+        "ada2_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=4),
+        "ada2_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=5),
+        "ada2_50": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=50),
+        "ada2_100": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=100),
+        "ada2_500": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=500),
+        "ada2_900": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=2), n_estimators=900),
+        "ada3_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=2),
+        "ada3_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=4),
+        "ada3_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=3), n_estimators=5),
+        "ada5_2": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=2),
+        "ada5_4": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=4),
+        "ada5_5": AdaBoostClassifier(estimator=DecisionTreeClassifier(max_depth=5), n_estimators=5),
+        "logistic_l2_1": LogisticRegression(max_iter=5000, penalty="l2", C=0.1),
+        "logistic_l2_2": LogisticRegression(max_iter=5000, penalty="l2", C=0.2),
+        "logistic_l2_3": LogisticRegression(max_iter=5000, penalty="l2", C=0.3),
+        "logistic_l2_4": LogisticRegression(max_iter=5000, penalty="l2", C=0.4),
+        "logistic_l2_5": LogisticRegression(max_iter=5000, penalty="l2", C=0.5)
+    }
 
-    best_score = 0
-    best_score_depth = 0
-    best_score_cv = 0
+    best_model_score = 0
+    best_model_name = None
 
-    # for depth in range(1, 11):
-    #     for cv in [2, 5, 10, 20]:
-    #         model = DecisionTreeClassifier(max_depth=depth)
-    #         scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
-    #         print(f"score for decision tree (depth {depth}, cv {cv}) is:", np.round(scores, 2), " Mean: ",
-    #               np.mean(scores))
-    #
-    #         if (np.mean(scores) > best_score):
-    #             best_score = np.mean(scores)
-    #             best_score_depth = depth
-    #             best_score_cv = cv
-    #
-    # print(f"best estimator: {best_score} for cv {best_score_cv} and depth {best_score_depth}")
-    # print("=======")
-    # best_score = 0
+    for name, model in models.items():
+        print(f"Testing {name}...")
 
-    # for neighbors in [2, 5, 10, 20, 50, 100, 200, 300, 500]:
-    #     for cv in [2, 5, 10, 20]:
-    #         model = KNeighborsClassifier(n_neighbors=neighbors)
-    #         scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
-    #         print(f"score for knn (neighbors: {neighbors}, cv {cv}) is:", scores, " Mean: ", np.mean(scores))
-    #
-    #         if (np.mean(scores) > best_score):
-    #             best_score = np.mean(scores)
-    #             best_score_depth = neighbors
-    #             best_score_cv = cv
-    #
-    # print(f"best estimator: {best_score} for cv {best_score_cv} and neighbors {best_score_depth}")
-    print("=======")
-    best_score = 0
+        model.fit(X, ~y.isna())
+        y_pred = model.predict(X_dev)
 
-    base_model = DecisionTreeClassifier(max_depth=2)
+        score = f1_score(y_pred, ~y_dev.isna(), average="macro")
+        print(f"Score for {name} is:", score)
 
-    # Create the AdaBoost model using the decision tree as the base estimator
-    for n_estimator in range(1, 20):
-        print(f"checking n_estimator {n_estimator}")
-        model = AdaBoostClassifier(estimator=base_model, n_estimators=n_estimator)
+        if best_model_score < score:
+            best_model_score = score
+            best_model_name = name
 
-        scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=5, scoring="f1")
-
-        print(f"score for adaboost (depth {n_estimator}, cv {5}) is:", np.round(scores, 2), " Mean: ", np.mean(scores))
-
-        if (np.mean(scores) > best_score):
-            best_score = np.mean(scores)
-            best_score_depth = n_estimator
-            # best_score_cv = cv
-
-    print(f"best estimator: {best_score} for cv {best_score_cv} and estimators {best_score_depth}")
-
-    print("=======")
-
-    print("starting soft svm prediction")
-    model = svm.SVC(kernel='linear', C=0.4)
-    scores = cross_val_score(model, X_dev[:500], (~y_dev.isna())[:500], cv=5, scoring="f1")
-
-    print("score for soft svm is:", scores, " Mean: ", np.mean(scores))
+    print(f"The best found model is {best_model_name} with a score of {best_model_score}")
 
 
 if __name__ == "__main__":
@@ -443,21 +398,30 @@ if __name__ == "__main__":
 
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
 
-    # df = X_train
-    # df["answer"] = ~y_train.isna()
-    # corr = df.corr()
-    #
-    # tsne = TSNE(n_components=2, perplexity=30, random_state=0)
-    # embedded_data = tsne.fit_transform(X_train, ~y_train.isna())
-    #
-    # plt.scatter(embedded_data[:, 0], embedded_data[:, 1], c=~y_train.isna(), s=30)
-    # plt.xlabel('Principal Component 1')
-    # plt.ylabel('Principal Component 2')
-    # plt.title('PCA Result')
-    # plt.savefig('pca_result.png')
+    # from sklearn.decomposition import PCA
+    # import matplotlib.pyplot as plt
+    # pca = PCA(n_components=2)
+    # transformed_data = pca.fit_transform(X_train)
+    # plt.scatter(transformed_data[:, 0], transformed_data[:, 1], c=~y_train.isna())
+    # plt.title("PCA Visualization")
+    # plt.xlabel("Principal Component 1")
+    # plt.ylabel("Principal Component 2")
     # plt.show()
 
-    run_estimator_testing(X_train, y_train)
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    from sklearn.manifold import TSNE
+    tsne = TSNE(n_components=3, perplexity=30, learning_rate=200)
+    transformed_data = tsne.fit_transform(X_train)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(transformed_data[:, 0], transformed_data[:, 1], transformed_data[:, 2], c=~y_train.isna())
+    ax.set_title("t-SNE 3D Visualization")
+    ax.set_xlabel("Dimension 1")
+    ax.set_ylabel("Dimension 2")
+    ax.set_zlabel("Dimension 3")
+    plt.show()
 
-    # Fit the model to your data
-    # adaboost_model.fit(X_train, y_train)
+    run_estimator_testing(X_train, y_train, X_dev, y_dev)
+
+    # export_csv()
