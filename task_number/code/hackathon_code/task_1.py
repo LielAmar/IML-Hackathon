@@ -110,7 +110,7 @@ def calculate_total_worth(price ,time_duration , info_tuple_list):
     percent_left = 100
     for i in range(0, len(info_tuple_list)):
         worth = calculate_worth(percent_left, time_duration, info_tuple_list[i])
-        if worth == info_tuple_list[1]:
+        if worth == info_tuple_list[i][1]:
             percent_left -= worth
         policy_list.append(worth)
     policy_list.sort(reverse=True)
@@ -120,9 +120,6 @@ def calculate_total_worth(price ,time_duration , info_tuple_list):
     return percent_paid
 
 def receive_policy(price, time_duration, nights, policy):
-    if(time_duration == 0):
-        return 1
-        # TODO: change me
     policies = policy.split("_")
     info_list = []
     for pol in policies:
@@ -139,13 +136,17 @@ def receive_policy(price, time_duration, nights, policy):
     return calculate_total_worth(price, time_duration, info_list)
 
 def create_cancellation_policy_feature(X):
-    for index, row in X.iterrows():
-        time_duration = row["time_ahead"]
-        nights = row["staying_duration"]
-        policy = row["cancellation_policy_code"]
-        price = row["original_selling_amount"]
-        X.at[index, "cancellation_policy_code_2"] = receive_policy(price, time_duration, nights, policy)
 
+    X["cancellation_policy_code"] = X.apply(lambda x:
+                                            receive_policy(X["original_selling_amount"], X["time_ahead"],
+                                                           X["staying_duration"], X["cancellation_policy_code"]))
+    #
+    # for index, row in X.iterrows():
+    #     time_duration = row["time_ahead"]
+    #     nights = row["staying_duration"]
+    #     policy = row["cancellation_policy_code"]
+    #     price = row["original_selling_amount"]
+    #     X.at[index, "cancellation_policy_code_2"] = receive_policy(price, time_duration, nights, policy)
     return X
 
 def preprocess_train(X, y):
