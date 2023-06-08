@@ -10,6 +10,10 @@ from sklearn import svm
 from sklearn.datasets import make_classification
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
 
 import matplotlib.pyplot as plt
 
@@ -236,8 +240,8 @@ def remove_redundant_features(X):
                 'request_twinbeds', 'request_airport', 'request_earlycheckin'], axis=1)
 
     return X.drop(['checkin_date', 'checkout_date', 'booking_datetime', 'no_of_children',
-                   'hotel_country_code', 'origin_country_code', 'hotel_city_code', 'hotel_brand_code',
-                   'guest_nationality_country_name'], axis=1)
+                   'hotel_country_code', 'origin_country_code', 'hotel_city_code',
+                   'hotel_brand_code'], axis=1)
 
 
 def create_dummy_features(X):
@@ -247,7 +251,7 @@ def create_dummy_features(X):
     # X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
     # X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
     X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
-    # X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
+    X = pd.get_dummies(X, prefix='guest_nationality_country_name', columns=['guest_nationality_country_name'])
     X = pd.get_dummies(X, prefix='original_payment_method', columns=['original_payment_method'])
     X = pd.get_dummies(X, prefix='original_payment_type', columns=['original_payment_type'])
     X = pd.get_dummies(X, prefix="charge_option", columns=["charge_option"])
@@ -270,7 +274,8 @@ def create_linear_features(X):
     X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
 
     X['original_selling_amount'] = X.apply(lambda x:
-                (1 / currencies[x["original_payment_currency"]]) * x["original_selling_amount"], axis=1)
+                                           (1 / currencies[x["original_payment_currency"]]) * x[
+                                               "original_selling_amount"], axis=1)
     # star rating
     # no of adults
     # selling amount
@@ -285,10 +290,9 @@ def calculate_worth(time_duration, cancellation_policy):
     percent = cancellation_policy[1]
     worth = (cancellation_days / time_duration) * percent
     return worth
-    # Use a breakpoint in the code line below to debug your script.
 
 
-def calculate_total_worth(price, time_duration, info_tuple_list):
+def calculate_total_worth(time_duration, info_tuple_list):
     total_worth = 0
     scalar = 1
     policy_list = []
@@ -299,7 +303,7 @@ def calculate_total_worth(price, time_duration, info_tuple_list):
             percent_cost = info_tuple_list[i][1]
         else:
             j = i
-    if j != len(info_tuple_list)-1:
+    if j != len(info_tuple_list) - 1:
         for i in range(j, len(info_tuple_list)):
             worth = calculate_worth(time_duration, info_tuple_list[i])
             policy_list.append(worth)
@@ -307,7 +311,7 @@ def calculate_total_worth(price, time_duration, info_tuple_list):
     for i in range(0, len(policy_list)):
         total_worth += scalar * policy_list[i]
         scalar *= 0.5
-    return total_worth * ((100-percent_cost) / 100.0) + percent_cost
+    return total_worth * ((100 - percent_cost) / 100.0) + percent_cost
 
 
 def receive_policy(price, time_duration, nights, policy):
@@ -321,13 +325,11 @@ def receive_policy(price, time_duration, nights, policy):
                     info_list.append((int(match.group(2)), (100 * int(match.group(3))) / nights))
                 else:
                     info_list.append((int(match.group(2)), int(match.group(3))))
-            else:
-                pass
-                # TODO: handel no-show;
-    return calculate_total_worth(price, time_duration, info_list)
-
+    return price * calculate_total_worth(time_duration, info_list)
 
 def create_cancellation_policy_feature(X):
+    X['no_show'] = X.apply(lambda x: 1 if re.search(r"[^D](\d+)([PN])", x["cancellation_policy_code"]) else 0, axis=1)
+
     X["cancellation_policy_code"] = X.apply(lambda x:
                                             receive_policy(x["original_selling_amount"], x["time_ahead"],
                                                            x["staying_duration"],
@@ -362,35 +364,48 @@ def preprocess_test(X, features):
 
     return X
 
+def run_estimator_testing(X_dev, y_dev):
+    # print("Running tests...")
 
-def print_stats(X_train, y_train):
-    arr = []
-    for value in X_train["hotel_city_code"].unique():
-        y = y_train[X_train["hotel_city_code"] == value]
-        arr.append(np.sum((~y.isna())) / len(y))
-        # print(value, np.sum((~y.isna())) / len(y), len(y))
+    # Logistic Regression
+    # model = LogisticRegression()
+    # scores = cross_val_score(model, X_dev[:1000], (~y_dev.isna())[:1000], cv=5, scoring="f1")
+    # print("score for logistic regression is:", scores, " Mean: ", np.mean(scores))
 
-    print("hotel_city_code mean: ", np.mean(np.array(arr)))
-    print("hotel_city_code std: ", np.std(np.array(arr)))
+    for depth in range(1, 11):
+        for cv in [2, 5, 10, 20]:
+            model = DecisionTreeClassifier(max_depth=depth)
+            scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
+            print(f"score for decision tree (depth {depth}, cv {cv}) is:", np.round(scores, 2), " Mean: ", np.mean(scores))
 
-    arr = []
-    for value in X_train["hotel_brand_code"].unique():
-        y = y_train[X_train["hotel_brand_code"] == value]
-        arr.append(np.sum((~y.isna())) / len(y))
-        # print(value, np.sum((~y.isna())) / len(y), len(y))
+    print("=======")
 
-    print("hotel_brand_code mean: ", np.mean(np.array(arr)))
-    print("hotel_brand_code std: ", np.std(np.array(arr)))
+    for neighbors in [2, 5, 10, 20, 50, 100, 200, 300, 500]:
+        for cv in [2, 5, 10, 20]:
+            model = KNeighborsClassifier(n_neighbors=neighbors)
+            scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=cv, scoring="f1")
+            print(f"score for knn (neighbors: {neighbors}, cv {cv}) is:", scores, " Mean: ", np.mean(scores))
 
-    arr = []
-    for value in X_train["guest_nationality_country_name"].unique():
-        y = y_train[X_train["guest_nationality_country_name"] == value]
-        arr.append(np.sum((~y.isna())) / len(y))
-        # print(value, np.sum((~y.isna())) / len(y), len(y))
+    print("=======")
 
-    print("guest_nationality_country_name mean: ", np.mean(np.array(arr)))
-    print("guest_nationality_country_name std: ", np.std(np.array(arr)))
+    base_model = DecisionTreeClassifier(max_depth=2)
 
+    # Create the AdaBoost model using the decision tree as the base estimator
+    for n_estimator in range(1, 20):
+        print(f"checking n_estimator {n_estimator}")
+        model = AdaBoostClassifier(estimator=base_model, n_estimators=n_estimator)
+
+        scores = cross_val_score(model, X_dev[:10000], (~y_dev.isna())[:10000], cv=5, scoring="f1")
+
+        print(f"score for adaboost (depth {n_estimator}, cv {5}) is:", np.round(scores, 2), " Mean: ", np.mean(scores))
+
+    print("=======")
+
+    print("starting soft svm prediction")
+    model = svm.SVC(kernel='linear', C=0.4)
+    scores = cross_val_score(model, X_dev[:500], (~y_dev.isna())[:500], cv=5, scoring="f1")
+
+    print("score for soft svm is:", scores, " Mean: ", np.mean(scores))
 
 if __name__ == "__main__":
     np.random.seed(0)
@@ -400,49 +415,11 @@ if __name__ == "__main__":
 
     X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
 
-    # print_stats(X_train, y_train)
-
-    print("0")
     X_train, y_train = preprocess_train(X_train, y_train)
-    print("1")
+
     X_dev = preprocess_test(X_dev, X_train.columns.tolist())
-    print("2")
 
-    # print(len(X_train.columns.tolist()))
+    run_estimator_testing(X_dev, y_dev)
 
-    # Soft-SVM
-    for i in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]:
-        svm_model = svm.SVC(kernel='linear', C=i)
-
-        print("3")
-
-        # Perform cross-validation and obtain the scores
-        scores = cross_val_score(svm_model, X_dev[:1000], (~y_dev.isna())[:1000], cv=5)
-
-        print("score for", i, "is:", scores, " Mean: " + np.mean(scores))
-
-        # svm_classifier = svm.SVC(C=i)
-        # print("3")
-        # svm_classifier.fit(X_train, (~y_train.isna()))
-        # print("4")
-        # y_pred = svm_classifier.predict(X_dev)
-        # print("5")
-        # accuracy = accuracy_score(~y_dev.isna(), y_pred)
-
-        # print("accuracy", accuracy)
-
-    # PCA
-    # scaler = StandardScaler()
-    # scaled_data = scaler.fit_transform(X.drop(['cancellation_policy_code'], axis=1))
-    # pca = PCA(n_components=2)
-    # pca.fit(scaled_data)
-    # transformed_data = pca.transform(scaled_data)
-    #
-    # plt.scatter(transformed_data[:, 0], transformed_data[:, 1], c=y, s=30)
-    # plt.xlabel('Principal Component 1')
-    # plt.ylabel('Principal Component 2')
-    # plt.title('PCA Result')
-    # plt.savefig('pca_result.png')
-    # plt.show()
-
-# TODO: restore columns for test cases
+    # Fit the model to your data
+    # adaboost_model.fit(X_train, y_train)
