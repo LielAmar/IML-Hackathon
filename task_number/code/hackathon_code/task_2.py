@@ -227,7 +227,7 @@ def split_data(df: pd.DataFrame):
         lambda x: (1 / currencies[x["original_payment_currency"]]) * x["original_selling_amount"], axis=1)
 
     cancellation_datetime = df["cancellation_datetime"]
-    X, y = df.drop(["original_selling_amount"], axis=1), df["original_selling_amount"]
+    X, y = df.drop(["original_selling_amount", "cancellation_datetime"], axis=1), df["original_selling_amount"]
     y = pd.Series(np.where(cancellation_datetime.isna(), -1, y))
 
     # Divide into train, dev and test
@@ -362,7 +362,59 @@ def run_task_2(input_file, output_file):
     result.to_csv(output_file, index=False)
 
 
+
+
+def fit_and_plot():
+    df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
+                     parse_dates=['booking_datetime', 'checkin_date', 'checkout_date'])
+
+    X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
+
+    X_train, y_train = preprocess_train(X_train, y_train)
+
+    X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+
+    def rmse(y_true, y_pred):
+
+        y_pred[y_pred < 0] = -1
+        mse = mean_squared_error(y_true, y_pred)
+        rmse = np.sqrt(mse)
+        return -rmse
+
+    rmse_scorer = make_scorer(rmse, greater_is_better=False)
+
+    errors_for_ridge = []
+    errors_for_lasso = []
+
+    alphas = np.linspace(2.5, 8.5, 40)
+
+    for alpha in alphas:
+        # alpha = 3.5 for 172.5
+        print(f"checking alpha {alpha}")
+
+        model = Ridge(alpha=alpha)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring=rmse_scorer)
+        errors_for_ridge.append(np.mean(scores))
+        print(f"score for ridge (alpha {alpha}) is:", np.mean(scores))
+
+        model = Lasso(alpha=alpha)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring=rmse_scorer)
+        errors_for_lasso.append(np.mean(scores))
+        print(f"score for lasso (alpha {alpha}) is:", np.mean(scores))
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(alphas, errors_for_ridge, label='Ridge')
+    plt.plot(alphas, errors_for_lasso, label='Lasso')
+
+    plt.xlabel('Lambda')
+    plt.ylabel('RMSE')
+    plt.title('Ridge and Lasso RMSE as function of Lambda')
+    plt.legend()
+
+    plt.savefig("ridge_vs_lasso1.png")
+
 if __name__ == "__main__":
     np.random.seed(0)
 
-    fit_over_dataset()
+    fit_and_plot()
+    # fit_over_dataset()
