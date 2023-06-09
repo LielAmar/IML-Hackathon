@@ -322,7 +322,7 @@ def create_boolean_features(X):
 
 
 def create_linear_features(X):
-    X['existence'] = (X['hotel_live_date'] - X['booking_datetime']) / np.timedelta64(1, 'D')
+    X['existence'] = (X['hotel_live_date'].astype('datetime64[ns]')- X['booking_datetime'].astype('datetime64[ns]')) / np.timedelta64(1, 'D')
     X['time_ahead'] = (X['checkin_date'] - X['booking_datetime']) / np.timedelta64(1, 'D')
     X['staying_duration'] = (X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D')
     X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
@@ -647,13 +647,15 @@ def fit_over_dataset():
 
     joblib.dump(model, 'xg500.joblib', compress=9)
 
+    np.save('X_train_columns_task_1.npy', X_train.columns, allow_pickle=True)
+
 
 def run_task_1(input_file, output_file):
     model = joblib.load("./hackathon_code/xg500.joblib")
 
     df = pd.read_csv(input_file, parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
-    X = preprocess_test(df, columns)
+    X = preprocess_test(df, np.load("./hackathon_code/X_train_columns_task_1.npy", allow_pickle=True))
 
     y_pred = model.predict(X)
 
@@ -662,6 +664,15 @@ def run_task_1(input_file, output_file):
     result["cancellation"] = y_pred.astype(int)
 
     result.to_csv(output_file, index=False)
+
+def task_1_prediction(X):
+    model = joblib.load("./hackathon_code/xg500.joblib")
+
+    X = preprocess_test(X, np.load("./hackathon_code/X_train_columns_task_1.npy", allow_pickle=True))
+    X = X.astype(float)
+
+    return model.predict(X)
+
 
 
 if __name__ == "__main__":

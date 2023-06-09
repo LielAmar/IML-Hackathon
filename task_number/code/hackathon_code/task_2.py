@@ -245,7 +245,7 @@ def remove_redundant_features(X):
                 'request_nonesmoke', 'request_latecheckin', 'request_earlycheckin', 'charge_option',
                 'cancellation_policy_code', 'original_payment_currency', 'original_payment_method',
                 'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime',
-                "no_of_adults", "no_of_children", "cancellation_datetime",
+                "no_of_adults", "no_of_children",
                 "request_highfloor", "request_largebed", "request_twinbeds", "request_airport"], axis=1)
 
     return X
@@ -312,80 +312,54 @@ def preprocess_test(X, features):
 def fit_over_dataset():
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
                      parse_dates=['booking_datetime', 'checkin_date', 'checkout_date'])
-    # cancellation_datetime = df["cancellation_datetime"]
+
     cancellation_datetime = df["cancellation_datetime"]
     df["original_selling_amount"] = df.apply(
         lambda x: (1 / currencies[x["original_payment_currency"]]) * x["original_selling_amount"], axis=1)
-    X, y = df.drop(["original_selling_amount"], axis=1), df["original_selling_amount"]
+
+    X, y = df.drop(["original_selling_amount", "cancellation_datetime"], axis=1), df["original_selling_amount"]
     y = pd.Series(np.where(cancellation_datetime.isna(), -1, y))
 
     # X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
 
     X_train, y_train = preprocess_train(X, y)
-    # X_test_before = X_test.copy()
 
-    # X_test = preprocess_test(X_test, X_train.columns.tolist())
-    # cancellation_datetime = cancellation_datetime.loc[X_test.index]
-
-    # def rmse(y_true, y_pred):
-    #     # y_pred[y_pred < 0] = -1
-    #     mse = mean_squared_error(y_true, y_pred)
-    #     rmse = np.sqrt(mse)
-    #     return rmse
-    # rmse_scorer = make_scorer(rmse, greater_is_better=False)
-
-    np.save('X_train_columns.npy', X_train.columns)
+    np.save('X_train_columns_task_2.npy', X_train.columns)
 
     model = Ridge(alpha=3.5)
     model.fit(X_train, y_train)
+
     joblib.dump(model, 'ridge3.5.joblib', compress=9)
 
 
-
-    # y_pred = model.predict(X_test)
-    #
-    # X_test_before["original_selling_amount"] = y_pred
-    #
-    # y_cacel = task_1_prediction(X_test_before)
-    # y_pred[y_cacel == 1] = -1
-    # y_pred[y_pred < 0] = -1
-    # print(rmse(y_test, y_pred))
-
-    # for alpha in np.linspace(1,50, 50):
-    #     # alpha = 3.5 for 172.5
-    #     print(f"checking alpha {alpha}")
-    #     # model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
-    #     model = Ridge(alpha=alpha)
-    #     scores = cross_val_score(model, X_train, y_train, cv=5, scoring=rmse_scorer)
-    #
-    #     print(f"score for linear regression (depth {alpha}, cv {5}) is:", np.round(scores, 2), " Mean: ",
-    #           np.mean(scores))
-
 def run_task_2(input_file, output_file):
-    model = joblib.load("./hackathon_code/xg500.joblib")
+    model = joblib.load("./hackathon_code/ridge3.5.joblib")
 
     df = pd.read_csv(input_file, parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
+    selling_cur = df["original_payment_currency"]
+    X_before = df.copy()
 
-    X = preprocess_test(df, np.load("X_train_columns.npy"))
+    X = preprocess_test(df, np.load("./hackathon_code/X_train_columns_task_2.npy", allow_pickle=True))
 
     y_pred = model.predict(X)
+    X_before["original_selling_amount"] = y_pred
+
+    y_cancel = task_1_prediction(X_before)
+    y_pred[y_cancel == 0] = -1
+    y_pred[y_pred < 0] = -1
+
+    y_pred_curr = pd.DataFrame()
+    y_pred_curr["original_selling_amount"] = y_pred.copy()
+    y_pred_curr["original_payment_currency"] = selling_cur
+
+    y_pred = y_pred_curr.apply(
+        lambda y: -1 if y["original_selling_amount"] == -1 else currencies[y["original_payment_currency"]] * y["original_selling_amount"], axis=1)
 
     result = pd.DataFrame()
     result["id"] = df["h_booking_id"]
     result["predicted_selling_amount"] = y_pred.astype(int)
 
     result.to_csv(output_file, index=False)
-
-
-def task_2_prediction(X):
-    model = joblib.load("../hackathon_code/xg500.joblib")
-
-    X = preprocess_test(X, np.load("X_train_columns.npy"))
-    X = X.astype(float)
-
-    y_pred = model.predict(X)
-
-    return y_pred
 
 
 if __name__ == "__main__":
