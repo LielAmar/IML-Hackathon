@@ -1,3 +1,4 @@
+import joblib
 import numpy as np
 import pandas as pd
 import re
@@ -22,6 +23,8 @@ from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 import matplotlib.pyplot as plt
 
 # Currencies as of 8.6.23 12:45
+from task_number.code.hackathon_code.task_1 import task_1_prediction
+
 currencies = {
     "AED": 3.673,
     "AFN": 86.517226,
@@ -198,25 +201,21 @@ means = {'hotel_star_rating': 2.7379305082159027,
          'staying_duration': 1.783537671058656,
          'no_of_people': 2.1357277305794375}
 
+
 def clean_data(X: pd.DataFrame, y: pd.Series):
     X = X[X["no_of_people"] < 20]
     X = X[X["time_ahead"] >= -1]
-    X[X["time_ahead"] <= 0] = 0
+    X["time_ahead"][X["time_ahead"] <= 0] = 0
     y = y.loc[X.index]
-    X["request_highfloor"] = X["request_highfloor"].fillna(0)
-    X["request_largebed"] = X["request_largebed"].fillna(0)
-    X["request_twinbeds"] = X["request_twinbeds"].fillna(0)
-    X["request_airport"] = X["request_airport"].fillna(0)
+    # X["request_highfloor"] = X["request_highfloor"].fillna(0)
+    # X["request_largebed"] = X["request_largebed"].fillna(0)
+    # X["request_twinbeds"] = X["request_twinbeds"].fillna(0)
+    # X["request_airport"] = X["request_airport"].fillna(0)
 
-    means = dict()
-    means["hotel_star_rating"] = np.mean(X[(~X["hotel_star_rating"].isna())
-                                           & (X["hotel_star_rating"] >= 0)
-                                           & (X["hotel_star_rating"] <= 5)]["hotel_star_rating"])
     X.loc[(X["hotel_star_rating"] < 0) |
           (X["hotel_star_rating"] > 5), "hotel_star_rating"] = means["hotel_star_rating"]
 
     for feature in ["time_ahead", "staying_duration", "no_of_people"]:
-        means[feature] = np.mean(X[(~X[feature].isna()) & X[feature] >= 0][feature])
         X.loc[(X[feature].isna()) | (X[feature] < 0), feature] = means[feature]
 
     return X, y
@@ -245,7 +244,9 @@ def remove_redundant_features(X):
                 'origin_country_code', 'original_payment_type', 'is_user_logged_in', 'is_first_booking',
                 'request_nonesmoke', 'request_latecheckin', 'request_earlycheckin', 'charge_option',
                 'cancellation_policy_code', 'original_payment_currency', 'original_payment_method',
-                'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime',"hotel_brand_code","no_of_adults", "no_of_children","cancellation_datetime"], axis=1)
+                'hotel_country_code', 'checkin_date', 'checkout_date', 'booking_datetime',
+                "no_of_adults", "no_of_children",
+                "request_highfloor", "request_largebed", "request_twinbeds", "request_airport"], axis=1)
 
     return X
 
@@ -254,17 +255,10 @@ def create_dummy_features(X):
     X['checkin_month'] = X['checkin_date'].dt.month
 
     X = pd.get_dummies(X, prefix='checkin_month', columns=['checkin_month'])
-    # X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
+    X = pd.get_dummies(X, prefix='hotel_brand_code', columns=['hotel_brand_code'])
     X = pd.get_dummies(X, prefix='accommadation_type_name', columns=['accommadation_type_name'])
     X = pd.get_dummies(X, prefix='hotel_city_code', columns=['hotel_city_code'])
 
-    return X
-
-
-def create_boolean_features(X):
-    # guest is not the customer
-    # logged in
-    # first booking
     return X
 
 
@@ -277,24 +271,25 @@ def create_linear_features(X):
     # selling amount
 
     return X
+
+
 def fill_na(X):
-    for feature in ["request_airport", "request_twinbeds", "request_largebed", "request_highfloor"]:
-        X[X[feature].isna()] = 0
+    # for feature in ["request_airport", "request_twinbeds", "request_largebed", "request_highfloor"]:
+    #     X[feature][X[feature].isna()] = 0
+    # X[X[feature].isna()] = 0
 
     X.loc[(X["hotel_star_rating"] < 0) |
           (X["hotel_star_rating"] > 5), "hotel_star_rating"] = means["hotel_star_rating"]
 
-    for feature in [ "time_ahead", "staying_duration", "no_of_people"]:
+    for feature in ["time_ahead", "staying_duration", "no_of_people"]:
         X.loc[(X[feature].isna()) | (X[feature] < 0), feature] = means[feature]
     return X
 
 
-
 def preprocess_train(X, y):
-    X = create_boolean_features(X)
     X = create_linear_features(X)
     X = create_dummy_features(X)
-
+    # X = fill_na(X)
     X = remove_redundant_features(X)
 
     X, y = clean_data(X, y)
@@ -303,7 +298,6 @@ def preprocess_train(X, y):
 
 
 def preprocess_test(X, features):
-    X = create_boolean_features(X)
     X = create_linear_features(X)
     X = create_dummy_features(X)
     X = remove_redundant_features(X)
@@ -315,42 +309,60 @@ def preprocess_test(X, features):
     return X
 
 
+def fit_over_dataset():
+    df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
+                     parse_dates=['booking_datetime', 'checkin_date', 'checkout_date'])
+
+    cancellation_datetime = df["cancellation_datetime"]
+    df["original_selling_amount"] = df.apply(
+        lambda x: (1 / currencies[x["original_payment_currency"]]) * x["original_selling_amount"], axis=1)
+
+    X, y = df.drop(["original_selling_amount", "cancellation_datetime"], axis=1), df["original_selling_amount"]
+    y = pd.Series(np.where(cancellation_datetime.isna(), -1, y))
+
+    # X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
+
+    X_train, y_train = preprocess_train(X, y)
+
+    np.save('X_train_columns_task_2.npy', X_train.columns)
+
+    model = Ridge(alpha=3.5)
+    model.fit(X_train, y_train)
+
+    joblib.dump(model, 'ridge3.5.joblib', compress=9)
+
+
+def run_task_2(input_file, output_file):
+    model = joblib.load("./hackathon_code/ridge3.5.joblib")
+
+    df = pd.read_csv(input_file, parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
+    selling_cur = df["original_payment_currency"]
+    X_before = df.copy()
+
+    X = preprocess_test(df, np.load("./hackathon_code/X_train_columns_task_2.npy", allow_pickle=True))
+
+    y_pred = model.predict(X)
+    X_before["original_selling_amount"] = y_pred
+
+    y_cancel = task_1_prediction(X_before)
+    y_pred[y_cancel == 0] = -1
+    y_pred[y_pred < 0] = -1
+
+    y_pred_curr = pd.DataFrame()
+    y_pred_curr["original_selling_amount"] = y_pred.copy()
+    y_pred_curr["original_payment_currency"] = selling_cur
+
+    y_pred = y_pred_curr.apply(
+        lambda y: -1 if y["original_selling_amount"] == -1 else currencies[y["original_payment_currency"]] * y["original_selling_amount"], axis=1)
+
+    result = pd.DataFrame()
+    result["id"] = df["h_booking_id"]
+    result["predicted_selling_amount"] = y_pred.astype(int)
+
+    result.to_csv(output_file, index=False)
+
+
 if __name__ == "__main__":
     np.random.seed(0)
 
-    df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
-                     parse_dates=['booking_datetime', 'checkin_date', 'checkout_date'])
-    cancellation_datetime = df["cancellation_datetime"]
-
-    X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df)
-
-    X_train, y_train = preprocess_train(X_train, y_train)
-
-    X_dev = preprocess_test(X_dev, X_train.columns.tolist())
-    cancellation_datetime = cancellation_datetime.loc[X_dev.index]
-    def rmse(y_true, y_pred):
-
-        y_pred[y_pred < 0] = -1
-        mse = mean_squared_error(y_true, y_pred)
-        rmse = np.sqrt(mse)
-        return -rmse
-
-    rmse_scorer = make_scorer(rmse, greater_is_better=False)
-    corr_data = X_train.copy()
-    # corr_data["answers"] = y_train
-    # corr = corr_data[["answers","time_ahead",'staying_duration', 'no_of_people', 'hotel_star_rating']].corr()
-    model = Ridge(alpha=3.5)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_dev)
-    y_pred[cancellation_datetime.isna()] = -1
-    y_pred[y_pred < 0] = -1
-    print(-rmse(y_dev, y_pred))
-    # for alpha in np.linspace(1,50, 50):
-    #     # alpha = 3.5 for 172.5
-    #     print(f"checking alpha {alpha}")
-    #     # model = make_pipeline(PolynomialFeatures(), StandardScaler(), Ridge(alpha= alpha))
-    #     model = Ridge(alpha=alpha)
-    #     scores = cross_val_score(model, X_train, y_train, cv=5, scoring=rmse_scorer)
-    #
-    #     print(f"score for linear regression (depth {alpha}, cv {5}) is:", np.round(scores, 2), " Mean: ",
-    #           np.mean(scores))
+    fit_over_dataset()

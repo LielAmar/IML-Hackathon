@@ -322,14 +322,14 @@ def create_boolean_features(X):
 
 
 def create_linear_features(X):
-    X['existence'] = (X['hotel_live_date'] - X['booking_datetime']) / np.timedelta64(1, 'D')
+    X['existence'] = (X['hotel_live_date'].astype('datetime64[ns]')- X['booking_datetime'].astype('datetime64[ns]')) / np.timedelta64(1, 'D')
     X['time_ahead'] = (X['checkin_date'] - X['booking_datetime']) / np.timedelta64(1, 'D')
     X['staying_duration'] = (X['checkout_date'] - X['checkin_date']) / np.timedelta64(1, 'D')
     X['no_of_people'] = (X['no_of_adults'] + X['no_of_children'])
 
-    # X['original_selling_amount'] = X.apply(lambda x:
-    #                                        (1 / currencies[x["original_payment_currency"]]) * x[
-    #                                            "original_selling_amount"], axis=1)
+    X['original_selling_amount'] = X.apply(lambda x:
+                                           (1 / currencies[x["original_payment_currency"]]) * x[
+                                               "original_selling_amount"], axis=1)
     return X
 
 
@@ -442,12 +442,14 @@ def preprocess_test(X, features):
     X = create_cancellation_policy_feature(X)
 
     X = clean_data(X, is_test=True)
+
     # Reindexing X - removing columns that are not in the features list
     X = X.reindex(columns=features, fill_value=0)
 
     return X
 
 
+# ===== Testing & Plotting =====
 def run_estimator_testing(X, y, X_dev, y_dev):
     print("Running estimator tester...")
 
@@ -498,14 +500,10 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     best_model_name = None
 
     X = X.astype(float)
-
-    # f1_scores_macro = []
-    # f1_scores_binary = []
-    # mse_scores = []
-    # accuracy_scores = []
+    X_dev = X_dev.astype(float)
 
     scores = {}
-    errors = ["macro", "binary", "mse", "accuracy"]
+    errors = ["macro", "binary", "accuracy", "mse"]
 
     for name, model in models.items():
         print(f"Testing {name}...")
@@ -524,8 +522,8 @@ def run_estimator_testing(X, y, X_dev, y_dev):
 
         scores[name].append(f1_score(y_pred, ~y_dev.isna(), average="macro"))
         scores[name].append(f1_score(y_pred, ~y_dev.isna()))
-        scores[name].append(mean_squared_error(y_pred.astype(int), ~y_dev.isna().astype(int)))
         scores[name].append(accuracy_score(y_pred, ~y_dev.isna()))
+        scores[name].append(mean_squared_error(y_pred.astype(int), ~y_dev.isna().astype(int)))
 
     print(f"The best found model is {best_model_name} with a score of {best_model_score}")
 
@@ -568,48 +566,88 @@ def run_estimator_testing(X, y, X_dev, y_dev):
     plt.ylabel('Score')
     plt.title("Model Score as function of Error Types")
 
-    plt.xticks(X_axis + width, ['F1 Macro', 'F1 Binary', 'MSE', 'Accuracy'])
+    plt.xticks(X_axis + width, ['F1 Macro', 'F1 Binary', 'Accuracy', 'MSE'])
     plt.legend((bar_xg, bar_lda, bar_forest5, bar_forest50, bar_svm, bar_tree2, bar_tree5, bar_ada2_2, bar_ada2_50, bar_logistic_l2_2),
                ('XGBoost', 'LDA', 'Forest (5)', 'Forest (50)', 'SVM', 'Tree (2)', 'Tree (5)', 'AdaBoost (2)', 'AdaBoost (50)', 'Logistic Regression + L2'))
 
     plt.savefig("fig.png")
 
 
+def run_top_features_compare(X, y, X_dev, y_dev):
+    model = XGBClassifier(max_depth=3,
+                  learning_rate=0.2,
+                  n_estimators=500,
+                  subsample=0.8,
+                  colsample_bytree=0.8,
+                  gamma=0.1,
+                  reg_alpha=0.1,
+                  reg_lambda=0.1,
+                  scale_pos_weight=1.0,
+                  eval_metric='logloss')
+
+    # Run over the pre-processed X with only the top important features
+    X_top_important = X[["cancellation_policy_21", "cancellation_policy_30", "no_of_adults", "time_ahead", "cancellation_policy_14"]]
+    X_dev_top_important = X_dev[["cancellation_policy_21", "cancellation_policy_30", "no_of_adults", "time_ahead", "cancellation_policy_14"]]
+
+    percentages = np.arange(1, 100, 1)
+
+    top_important_scores_train = np.zeros(shape=(99, ))
+    top_important_scores_test = np.zeros(shape=(99, ))
+
+    for index, percentage in enumerate(percentages):
+        print(index)
+
+        size = int((percentage / 100) * len(X))
+        model.fit(X_top_important[:size], (~y.isna())[:size])
+
+        top_important_scores_train[index-1] = f1_score(model.predict(X_top_important), ~y.isna(), average="macro")
+        top_important_scores_test[index-1] = f1_score(model.predict(X_dev_top_important), ~y_dev.isna(), average="macro")
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(percentages, top_important_scores_test, label='Test set (Top 5 features)')
+    plt.plot(percentages, top_important_scores_train, label='Train set (Top 5 features)')
+
+    plt.xlabel('Percentage of train size')
+    plt.ylabel('F1 Macro Score')
+    plt.title('F1 Macro Score as a function of Train set size')
+    plt.legend()
+
+    plt.savefig("train_vs_test.png")
+
+
+# ===== Main ======
 def fit_over_dataset():
     df = pd.read_csv("../datasets/agoda_cancellation_train.csv",
                      parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
-    X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
-    # X_train, X_test, y_train, y_test = split_data(df, include_dev=False)
+    # X_train, X_dev, X_test, y_train, y_dev, y_test = split_data(df, include_dev=True)
+    X_train, y_train = df.drop(["cancellation_datetime"], axis=1), df["cancellation_datetime"]
 
     X_train, y_train = preprocess_train(X_train, y_train)
     X_train = X_train.astype(float)
 
-    X_dev = preprocess_test(X_dev, X_train.columns.tolist())
-    # X_test = preprocess_test(X_test, columns)
+    # X_dev = preprocess_test(X_dev, X_train.columns.tolist())
+    # X_dev = X_dev.astype(float)
 
-    run_estimator_testing(X_train, y_train, X_dev, y_dev)
+    # run_estimator_testing(X_train, y_train, X_dev, y_dev)
+    # run_top_features_compare(X_train, y_train, X_dev, y_dev)
 
-    # Chosen model: Forest with 50 estimators
-    # model = RandomForestClassifier(n_estimators=50)
-    # model = XGBClassifier(max_depth=3,
-    #                       learning_rate=0.2,
-    #                       n_estimators=500,
-    #                       subsample=0.8,
-    #                       colsample_bytree=0.8,
-    #                       gamma=0.1,
-    #                       reg_alpha=0.1,
-    #                       reg_lambda=0.1,
-    #                       scale_pos_weight=1.0,
-    #                       eval_metric='logloss')
-    # model.fit(X_train, ~y_train.isna())
-    #
-    # joblib.dump(model, 'xg500.joblib', compress=9)
-    #
-    # y_pred = model.predict(X_test)
-    #
-    # score = f1_score(y_pred, ~y_test.isna(), average="macro")
-    # print("score is: ", score)
+    # Chosen model: XGBoost with 500 iterations
+    model = XGBClassifier(max_depth=3,
+                          learning_rate=0.2,
+                          n_estimators=500,
+                          subsample=0.8,
+                          colsample_bytree=0.8,
+                          gamma=0.1,
+                          reg_alpha=0.1,
+                          reg_lambda=0.1,
+                          scale_pos_weight=1.0,
+                          eval_metric='logloss')
+    model.fit(X_train, ~y_train.isna())
+
+    joblib.dump(model, 'xg500.joblib', compress=9)
+
+    np.save('X_train_columns_task_1.npy', X_train.columns, allow_pickle=True)
 
 
 def run_task_1(input_file, output_file):
@@ -617,7 +655,7 @@ def run_task_1(input_file, output_file):
 
     df = pd.read_csv(input_file, parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
 
-    X = preprocess_test(df, columns)
+    X = preprocess_test(df, np.load("./hackathon_code/X_train_columns_task_1.npy", allow_pickle=True))
 
     y_pred = model.predict(X)
 
@@ -626,6 +664,15 @@ def run_task_1(input_file, output_file):
     result["cancellation"] = y_pred.astype(int)
 
     result.to_csv(output_file, index=False)
+
+def task_1_prediction(X):
+    model = joblib.load("./hackathon_code/xg500.joblib")
+
+    X = preprocess_test(X, np.load("./hackathon_code/X_train_columns_task_1.npy", allow_pickle=True))
+    X = X.astype(float)
+
+    return model.predict(X)
+
 
 
 if __name__ == "__main__":
