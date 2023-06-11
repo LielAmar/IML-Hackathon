@@ -1,10 +1,12 @@
 import sys
 import pandas as pd
+import numpy as np
 
 from hackathon_code.task_1 import *
 from hackathon_code.task_2 import *
 
 if __name__ == "__main__":
+    np.random.seed(0)
 
     if len(sys.argv) == 3:
         df1 = pd.read_csv(sys.argv[1], parse_dates=['booking_datetime', 'checkin_date', 'checkout_date', 'hotel_live_date'])
